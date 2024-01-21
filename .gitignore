@@ -1,0 +1,5 @@
+/flickr
+.ipynb_checkpoints
+/notebooks/.ipynb_checkpoints
+/pretrained_models
+/__pycache__
