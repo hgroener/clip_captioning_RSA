@@ -1,0 +1,1 @@
+<generator object get_top_combs.<locals>.<genexpr> at 0x733b0f8b7ba0>
