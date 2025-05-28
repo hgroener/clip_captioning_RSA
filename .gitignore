@@ -3,3 +3,4 @@
 /notebooks/.ipynb_checkpoints
 /pretrained_models
 /__pycache__
+/cider/data
