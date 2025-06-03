@@ -2,5 +2,5 @@
 .ipynb_checkpoints
 /notebooks/.ipynb_checkpoints
 /pretrained_models
-/__pycache__
+**/__pycache__
 /cider/data
