@@ -16,8 +16,8 @@ def eval_cider(df, target_dir="../data/AbstractScenes_v1.1/parameter_tuning/", p
     gold_caps = []
     gen_caps = []
     
-    for i, row in df.iterrows():
-        gold = [{"image_id": row["file"], "caption": row["cap" + str(i)]} for i in range(6)]
+    for c, row in df.iterrows():
+        gold = [{"image_id": row["file"], "caption": row["cap" + str(i)]} for i in range(6) if type(row["cap" + str(i)])==str]
         gen = {"image_id": row["file"], "caption": row[gen_column]}
         
         gold_caps += gold
