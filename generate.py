@@ -31,8 +31,7 @@ import re
 import random as rd
 import itertools 
 
-sys.path.insert(1, './cider/')
-from cidereval import eval_cider
+from cider.cidereval import eval_cider
 
 #nltk.download()
 content_tags = ["JJ", "JJR", "JJS", "NN", "NNS", "NNP", "NNPS", "RB" , "RBR", "RBS", "VB", 
@@ -164,7 +163,6 @@ def load_clip_model(model_path, prefix_length=10):
     return(model)
 
 generation_model = load_clip_model(model_path)
-eval_model = load_clip_model(eval_model_path)
 
 ## generation
 # get clip prefix embedding from image path 
@@ -793,122 +791,3 @@ def generate_method(model, tokenizer, embeds, method="RSA", temperature=0.9, a=0
 
 
 
-
-## TESTING
-def test(df, t=1, a=3, top_k=100, temp=0.8, target_dir="./data/AbstractScenes_v1.1/testing/RSA_r3/", cname="RSA_caps", results_file="results.json",
-        results_csv="RSA_caps.csv", score_file = "scores.txt", k=10, presave=True, group_by = "scene_idx", generate=True):
-    os.makedirs(target_dir, exist_ok = True)
-    print("generating captions with temperature={}, t={}, a={}".format(temp, t, a))
-        #caps = generate2(model, tokenizer, train_df, temperature = t, top_p=p)
-    if generate: 
-        caps, stop_i = generate_RSA_t(model, tokenizer, df, temperature = temp, t=t, a=a, top_k=top_k, group_by=group_by)
-        print("captions generated, ")
-        for cap in caps: 
-            df.loc[df["file"]==cap[0], cname] = cap[1] 
-
-        if presave: 
-            df.to_csv(target_dir + results_csv)
-    else:
-        df = pd.read_csv(target_dir + results_csv)
-        
-    print("evaluating scenes...")
-    print("calculating CIDEr scores...")
-    cider = eval_cider(df, target_dir=target_dir, pathToData = target_dir, 
-                       result_file = results_file , gen_column=cname)["CIDEr"]
-    df["CIDEr"] = cider
-    mean_cider = sum(cider)/len(cider)
-
-    print("calculating informativity scores...")
-    for scene in tqdm(list(set(df[group_by]))):
-        scene_df = df[df[group_by]==scene]
-        caps = list(scene_df[cname])
-        files = list(scene_df["file"])
-        informative = [int(eval_informativity(cap, files[i], files, k=k)[2]) for i, cap in enumerate(caps)]
-        df.loc[df[group_by]==scene, 'informative'] = informative
-
-    df.to_csv(results_csv)
-    mean_informative = sum(list(df['informative']))/len(df)
-    
-    with open(target_dir + score_file, "w") as f:
-        f.write("cider: {}\ninformative: {}".format(mean_cider, mean_informative))
-
-    return(df, (mean_cider, mean_informative))
-
-#test_df, scores = test(test_sample)
-    
-#test_sample = pd.read_csv("./data/AbstractScenes_v1.1/testing/test_sample.csv")
-test_df, scores = test(df_test_triplets, t=0, target_dir="./data/AbstractScenes_v1.1/testing/", cname="caps_RSA", presave=True,
-                       results_file="results_test_RSA_random_triplets.json", results_csv="test_RSA_random_triplets.csv", 
-                       score_file = "test_scores_RSA_random_triplets.txt", k=3, group_by="triplet_idx")
-
-#t-est_sample = pd.read_csv("./data/AbstractScenes_v1.1/testing/test_sample.csv")
-test_df, scores = test(df_test_triplets, t=1, target_dir="./data/AbstractScenes_v1.1/testing/", cname="actual_caps_RSA", presave=True,
-                       results_file="results_test_actual_RSA_random_triplets.json", results_csv="test_actual_RSA_random_triplets.csv", 
-                       score_file = "test_scores_actual_RSA_random_triplets.txt", k=3, group_by="triplet_idx")
-
-# results greedy captions: around 82% (t=0)
-# results RSA captions: 97%
-
-# => if this is not due to some error I made when calculating scores on scenes (or due to the small sample size), this means that while RSA DOES work, it only does on 
-# dissimilar scenes, while very similar scenes (the ones that would actually need distinguishing) are not distinguished well. 
-
-reduced_df = pd.read_csv("/srv/storage/hgroener/other/clip_captioning_RSA/data/AbstractScenes_v1.1/testing/test_reduced3.csv")
-test_df, scores = test(reduced_df, t=1, target_dir="./data/AbstractScenes_v1.1/testing/", cname="RSA_caps", presave=True,
-                       results_file="results_test_RSA_r3.json", results_csv="test_RSA_r3.csv", 
-                       score_file = "test_scores_RSA_r3.txt", k=3)
-
-print(scores)
-
-### Looking at RSA generated captions
-RSA_df = pd.read_csv("./data/AbstractScenes_v1.1/testing/test_RSA_r3.csv")
-display(RSA_df)
-%matplotlib inline
-from IPython.display import Image
-
-scene1 = RSA_df[RSA_df["scene_idx"].isin([list(RSA_df["scene_idx"])[0]])]
-image_path = "./data/AbstractScenes_v1.1/RenderedScenes/"
-for i, row in scene1.iterrows():
-    print(row["RSA_caps"])
-    im = PIL.Image.open(image_path + row["file"])
-    plt.imshow(im)
-    plt.show() 
-
-test_df_greedy, scores_greedy = test(test_sample, t=0.5, a=3, top_k=100, temp=0.8, target_dir="./data/AbstractScenes_v1.1/testing/", cname="RSA_caps_t05", 
-                       results_file="results_RSA_t05.json", results_csv="./data/AbstractScenes_v1.1/testing/RSA_caps_t05.csv", 
-                       score_file = "scores_RSA_t05.txt")
-
-df = pd.read_csv("./data/AbstractScenes_v1.1/testing/RSA_caps_t05.csv")
-mean_informative = sum(list(df['informative']))/len(df)
-cider = df["CIDEr"] 
-mean_cider = sum(cider)/len(cider)
-with open("./data/AbstractScenes_v1.1/testing/scores_RSA_t05.txt", "w") as f:
-    f.write("cider: {}\ninformative: {}".format(mean_cider, mean_informative))
-## Informativity Eval 
-image_path = "./data/AbstractScenes_v1.1/RenderedScenes/"
-temperature = 0.9
-example_scene = df_debug[df_debug["scene_idx"]==list(df_debug["scene_idx"])[0]]
-
-display(example_scene)
-probs, scene, true = eval_informativity("girl and boy playing outside.", list(example_scene["file"])[4], list(example_scene["file"]))
-
-df_debug = pd.read_csv("/home/user/Documents/Projekt_Sprachgenerierung/project/clip_captioning_RSA/data/AbstractScenes_v1.1/df_debug.csv", index_col=0)
-df_debug.head()
-for scene in tqdm(list(set(df_debug["scene_idx"]))):
-    scene_df = df_debug[df_debug["scene_idx"]==scene]
-    caps = list(scene_df["cap_RSA_t"])
-    files = list(scene_df["file"])
-    informative = [int(eval_informativity(cap, files[i], files)[2]) for i, cap in enumerate(caps)]
-    df_debug.loc[df_debug.scene_idx==scene, 'informative'] = informative
-## aggregating scores
-score_list = [{"sampling": "greedy", "RSA": "no", "t": "n.a.", "POS": "n.a." , "CIDEr": 0, "informativity": 0},
-              {"sampling": "greedy", "RSA": "yes", "t": "no", "POS": "no" , "CIDEr": 0, "informativity": 0},
-              {"sampling": "greedy", "RSA": "yes", "t": 0.5, "POS": "no" , "CIDEr": 0, "informativity": 0},
-              {"sampling": "greedy", "RSA": "yes", "t": "no", "POS": "yes" , "CIDEr": 0, "informativity": 0},
-              {"sampling": "greedy", "RSA": "yes", "t": "yes", "POS": "yes" , "CIDEr": 0, "informativity": 0},
-              {"sampling": "beam search", "RSA": "no", "t": "n.a.", "POS": "n.a." , "CIDEr": 0, "informativity": 0},
-              {"sampling": "beam search", "RSA": "yes", "t": "no", "POS": "no" , "CIDEr": 0, "informativity": 0},
-              {"sampling": "beam search", "RSA": "yes", "t": 0.5, "POS": "no" , "CIDEr": 0, "informativity": 0},
-              {"sampling": "beam search", "RSA": "yes", "t": "no", "POS": "yes" , "CIDEr": 0, "informativity": 0},
-              {"sampling": "beam search", "RSA": "yes", "t": 0.5, "POS": "yes" , "CIDEr": 0, "informativity": 0}]
-
-score_df = pd.DataFrame(score_list)

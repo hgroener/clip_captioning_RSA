@@ -7,7 +7,7 @@ from transformers import GPT2Tokenizer
 
 import generate as gen
 from eval_informativity import eval_informativity
-from cider.cidereval import eval_ciderGPT2Tokenizer
+from cider.cidereval import eval_cider
 
 save_path = os.path.join(os.path.dirname(os.getcwd()), "pretrained_models")
 model_path = os.path.join(save_path, 'conceptual_weights.pt')
@@ -33,15 +33,13 @@ def test(df, t=1, pos = False, beam_search = False, a=3, top_k=100, temp=0.8, ta
     if generate:
         if not beam_search: 
             if not pos: 
-                gen.generate_RSA_pos(generation_model, tokenizer, df)
-        if func == "RSA_t": 
-            caps, _ = gen.generate_RSA_t(generation_model, tokenizer, df, temperature = temp, t=t, a=a, top_k=top_k, group_by=group_by)
-        elif func == "RSA_POS":
-
-        elif func == "beam":
-            caps = gen.generate_beam_RSA(df, temperature = temp, t=t, a=a, )
-
-        print("captions generated, ")
+                caps,_ = gen.generate_RSA_t(generation_model, tokenizer, df, temperature = temp, t=t, a=a, top_k=top_k, group_by=group_by)
+            else:
+                # caps, _ = gen.generate_RSA_POS()
+        else:
+            caps = gen.generate_beam_RSA(df, temperature = temp, t=t, a=a, pos=pos)
++
+        print("captions generated.")
         for cap in caps: 
             df.loc[df["file"]==cap[0], cname] = cap[1] 
 
@@ -78,9 +76,16 @@ if __name__=="__main__":
     test_df = pd.read_csv("other/clip_captioning_RSA/data/AbstractScenes_v1.1/processed_data/test_df_r3.csv")
     for rsa, decoding in itertools.product(list(RSA_dic.keys()), decoding_options):
         if decoding=="beam_search":
-            test_df, scores = test(test_df, func="beam", t=1, target_dir="./data/AbstractScenes_v1.1/testing/", cname="caps_RSA", presave=True,
-                                   results_file="results_test_RSA_random_triplets.json", results_csv="test_RSA_random_triplets.csv", 
-                                   score_file = "test_scores_RSA_random_triplets.txt", k=3, group_by="triplet_idx")
+            if rsa == "RSA_POS":
+                test_df, scores = test(test_df, beam_search=True, pos=True, t=1, target_dir="./data/AbstractScenes_v1.1/testing/{}/{}/".format(decoding, rsa), 
+                                       cname="caps_{}_{}".format(decoding, rsa), presave=True, results_file="test_{}_{}.json".foramt(decoding, rsa), 
+                                       results_csv="test_{}_{}.csv".format(decoding, rsa), score_file = "test_scores_{}_{}.txt".format(decoding, rsa),
+                                       k=3, group_by="scene_idx")
+            elif rsa == "RSA_t":
+                test_df, scores = test(test_df, beam_search=True, pos=False,t=0.5, target_dir="./data/AbstractScenes_v1.1/testing/{}/{}/".format(decoding, rsa), 
+                    cname="caps_{}_{}".format(decoding, rsa), presave=True, results_file="test_{}_{}.json".foramt(decoding, rsa), 
+                    results_csv="test_{}_{}.csv".format(decoding, rsa), score_file = "test_scores_{}_{}.txt".format(decoding, rsa),
+                    k=3, group_by="scene_idx")
         else: 
 
 
