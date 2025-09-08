@@ -2,10 +2,15 @@
 # coding: utf-8
 
 # demo script for running CIDEr
-from pydataformat.loadData import LoadData
+
+
+#import sys
+#sys.path.append("./pydataformat")
+
+from .pydataformat.loadData import LoadData
 import pdb
 import json
-from pyciderevalcap.eval import CIDErEvalCap as ciderEval
+from .pyciderevalcap.eval import CIDErEvalCap as ciderEval
 import pandas as pd
 import os
 

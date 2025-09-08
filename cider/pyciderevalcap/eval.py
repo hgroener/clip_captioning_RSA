@@ -1,7 +1,7 @@
 __author__ = 'rama'
-from pyciderevalcap.tokenizer.ptbtokenizer import PTBTokenizer
-from cider.cider import Cider
-from ciderD.ciderD import CiderD
+from .tokenizer.ptbtokenizer import PTBTokenizer
+from .cider.cider import Cider
+from .ciderD.ciderD import CiderD
 
 
 class CIDErEvalCap:

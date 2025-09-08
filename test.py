@@ -1,6 +1,7 @@
 
 import pandas as pd
 import os 
+from os.path import dirname, abspath
 from tqdm import tqdm
 import itertools
 from transformers import GPT2Tokenizer
@@ -9,7 +10,11 @@ import generate as gen
 from eval_informativity import eval_informativity
 from cider.cidereval import eval_cider
 
-save_path = os.path.join(os.path.dirname(os.getcwd()), "pretrained_models")
+
+current_folder = dirname(abspath(__file__))
+parent_folder = dirname(current_folder)
+image_path=current_folder + "/data/AbstractScenes_v1.1/RenderedScenes/"
+save_path = os.path.join(parent_folder, "pretrained_models")
 model_path = os.path.join(save_path, 'conceptual_weights.pt')
 
 generation_model = gen.load_clip_model(model_path)
@@ -26,23 +31,18 @@ RSA_dic = {"greedy": {"t": 0, "cname": "greedy_caps", "func": "RSA_t"},
 
 
 ## TESTING
-def test(df, t=1, pos = False, beam_search = False, a=3, top_k=100, temp=0.8, target_dir="./data/AbstractScenes_v1.1/testing/RSA_r3/", cname="RSA_caps", results_file="results.json",
+def test(df, t=1, pos = False, beam_search = False, a=3, top_k=100, temp=0.8, target_dir="./data/AbstractScenes_v1.1/testing/RSA_r3/", 
+         image_path = image_path, cname="RSA_caps", results_file="results.json",
         results_csv="RSA_caps.csv", score_file = "scores.txt", k=10, presave=True, group_by = "scene_idx", generate=True):
     os.makedirs(target_dir, exist_ok = True)
-    print("generating captions with temperature={}, t={}, a={}".format(temp, t, a))
+    print("generating captions with temperature={}, t={}, a={}, pos_decoding={}, beam_search={}".format(temp, t, a, pos, beam_search))
     if generate:
         if not beam_search: 
-            if not pos: 
-                caps,_ = gen.generate_RSA_t(generation_model, tokenizer, df, temperature = temp, t=t, a=a, top_k=top_k, group_by=group_by)
-            else:
-                # caps, _ = gen.generate_RSA_POS()
+            df,_, _ = gen.generate_RSA(generation_model, tokenizer, df, temperature = temp, t=t, a=a, top_k=top_k, group_by=group_by, pos_decoding=pos, 
+                                       image_path=image_path)
         else:
-            caps = gen.generate_beam_RSA(df, temperature = temp, t=t, a=a, pos=pos)
-+
+            df, _, _ = gen.generate_beam_RSA(df, temperature = temp, t=t, a=a, pos=pos, image_path=image_path)
         print("captions generated.")
-        for cap in caps: 
-            df.loc[df["file"]==cap[0], cname] = cap[1] 
-
         if presave: 
             df.to_csv(target_dir + results_csv)
     else:

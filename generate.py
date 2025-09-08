@@ -5,6 +5,7 @@
 import pandas as pd
 import clip
 import os
+from os.path import dirname, abspath
 from torch import nn
 import numpy as np
 import torch
@@ -65,9 +66,12 @@ def get_device(device_id: int) -> D:
 
 CUDA = get_device
 
-current_directory = os.getcwd()
-save_path = os.path.join(os.path.dirname(current_directory), "pretrained_models")
-os.makedirs(save_path, exist_ok=True)
+d = dirname(dirname(abspath(__file__)))
+print("d:", d)
+#current_directory = os.getcwd()
+save_path =  d + "/pretrained_models/"
+print("save_path:", save_path)
+#os.makedirs(save_path, exist_ok=True)
 model_path = os.path.join(save_path, 'conceptual_weights.pt')
 
 
@@ -185,7 +189,7 @@ def preproc_img(path, proj_model=generation_model, prefix_length = 10, d=False, 
     return prefix_embed
 
 
-def get_logits(embeds, temperature, model=model):
+def get_logits(embeds, temperature, model=generation_model):
     #print("embeds size: ", embeds.size())
     outputs = model.gpt(inputs_embeds=embeds)
     logits = outputs.logits
@@ -209,7 +213,8 @@ def generate_RSA(
         t = 0.5,
         image_path = "./data/AbstractScenes_v1.1/RenderedScenes/",
         d = False,
-        group_by = "scene_idx"
+        group_by = "scene_idx",
+        cname = "caps_RSA"
 
 ):
     model.eval()
@@ -346,9 +351,9 @@ def generate_RSA(
                 generated_list.append((file, output_text))
                 rsa_stop_list.append(rsa_stop)
                 no_rsa_pos_list.append(no_rsa_pos)
-
-    return (generated_list, rsa_stop_list, no_rsa_pos_list)
-)
+        for cap in generated_list: 
+            df.loc[df["file"]==cap[0], cname] = cap[1] 
+    return (df, rsa_stop_list, no_rsa_pos_list)
 
 
 def rearrange_RSA(logits, distr_logits, image_priors, l0_probs_tokens = 0, top_k=100, t = 1, a=3, i = 0, RSA=True, pos = False, print_stops=False):
@@ -459,7 +464,8 @@ def rearrange_RSA(logits, distr_logits, image_priors, l0_probs_tokens = 0, top_k
 
 
 def generate_beam_RSA(df, entry_length=67, temperature = 1, stop_token = ".", top_k = 100, t= 1, a=3, beam_size=5, 
-                      image_path = "./data/AbstractScenes_v1.1/RenderedScenes/", d=False, pos=False, print_stops = False):
+                      image_path = "./data/AbstractScenes_v1.1/RenderedScenes/", d=False, pos=False, print_stops = False,
+                      cname="caps_RSA"):
     generation_model.eval()
     generated_num = 0
     generated_list = []
@@ -605,7 +611,7 @@ def generate_beam_RSA(df, entry_length=67, temperature = 1, stop_token = ".", to
             seq_length  =seq_lengths[order[0]]
             length_sum += seq_length
             
-            generated_list.append(output_text)
+            generated_list.append((file, output_text))
             
             pos_no_rsa_output = pos_no_rsa_list[order[0]]
             pos_no_rsa_len = len(pos_no_rsa_output)
@@ -614,10 +620,13 @@ def generate_beam_RSA(df, entry_length=67, temperature = 1, stop_token = ".", to
             
             pos_no_rsa_scene.append(pos_no_rsa_output)
             
-        pos_no_rsa_average = pos_no_rsa_sum/length_sum
-        no_rsa_t_average = sum(rsa_stop_list)/length_sum
+        #pos_no_rsa_average = pos_no_rsa_sum/length_sum
+        #no_rsa_t_average = sum(rsa_stop_list)/length_sum
+        for cap in generated_list: 
+            df.loc[df["file"]==cap[0], cname] = cap[1] 
         
-    return(generated_list, rsa_stop_list, pos_no_rsa_scene, no_rsa_t_average, pos_no_rsa_average)
+    #return(df, rsa_stop_list, pos_no_rsa_scene, no_rsa_t_average, pos_no_rsa_average)
+    return(df, rsa_stop_list, pos_no_rsa_scene)
 
 
 
@@ -641,29 +650,19 @@ def get_pos(logits_target, probabilities_target, top_k=100):
     return(c_tag_probs > nc_tag_probs)
 
 
-# select decoding method (beam search, greedy search or RSA-based search), including temperature parameter and 
-# rationality parameter a (only for RSA-based search)
-def generate_method(model, tokenizer, embeds, method="RSA", temperature=0.9, a=0.05, t=0.5, top_k = 100):
-    if method=="beam_search":
-        generated_text_prefix = generate_beam(model, tokenizer, embed=embeds[0], temperature=temperature)[0]
-    elif method=="greedy":
-        generated_text_prefix = generate2(model, tokenizer, embed=embeds[0], temperature=temperature)
-    elif method=="nie":
-        generated_text_prefix = generate_RSA_nie(model, tokenizer, target_embed=embeds[0], distr_embeds = embeds[1:],
-                                                 temperature = temperature, a = a, t=t, top_k = top_k)
-    elif method=="wf":
-        generated_text_prefix = generate_RSA_wf(model, tokenizer, target_embed=embeds[0], distr_embeds = embeds[1:],
-                                                 temperature = temperature, a = a, t=t, top_k = top_k)
-    else: 
-        generated_text_prefix = generate_RSA_new(model, tokenizer, target_embed=embeds[0], distr1_embed=embeds[1], distr2_embed=embeds[2], 
-                                             temperature = temperature, a = a)
-
-    return generated_text_prefix
-
-
-
-
-
+if __name__=="__main__":
+    current_folder = dirname(abspath(__file__))
+    image_path=current_folder + "/data/AbstractScenes_v1.1/RenderedScenes/"
+    df = pd.read_csv(current_folder + "/data/AbstractScenes_v1.1/processed_data/train_df_r3.csv")
+    test_scenes = list(df["scene_idx"])[:10]
+    df = df[df["scene_idx"].isin(test_scenes)]
+    df, rsa_stop_list, _ = generate_RSA(generation_model, tokenizer, df, temperature=0.8, a=3, t = 0.7, cname="caps_RSA_t", 
+                                        image_path=image_path)
+    df, _, no_rsa_pos_list = generate_RSA(generation_model, tokenizer, df, temperature=0.8, a=3, t = 1, pos_decoding=True, cname="caps_RSA_pos", image_path=image_path)
+    df.to_csv(current_folder + "/temp/test_df.csv")
+    with open(current_folder + "/temp/RSA_stop_lists.txt", "w+") as f: 
+        f.write(str(rsa_stop_list))
+        f.write(str(no_rsa_pos_list))
 
 
 
