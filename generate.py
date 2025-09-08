@@ -195,7 +195,7 @@ def get_logits(embeds, temperature, model=model):
     return(logits)
 
 
-def generate_RSA_t(
+def generate_RSA(
         model,
         tokenizer,
         df,
@@ -204,6 +204,7 @@ def generate_RSA_t(
         temperature=1.,
         stop_token: str = '.',
         a = 1,
+        pos_decoding = False,
         print_logits = False,
         t = 0.5,
         image_path = "./data/AbstractScenes_v1.1/RenderedScenes/",
@@ -215,6 +216,7 @@ def generate_RSA_t(
     generated_num = 0
     generated_list = []
     rsa_stop_list = []
+    no_rsa_pos_list = []
     stop_token_index = tokenizer.encode(stop_token)[0]
     #filter_value = 0
     device = next(model.parameters()).device
@@ -230,7 +232,9 @@ def generate_RSA_t(
                 tokens = None
                 l0_prob_target = 0 
                 RSA = True
+                pos = True
                 rsa_stop = None
+                no_rsa_pos = []
 
                 #dnames = ["d_" + str(num) for num in range(6)]
                 target_embed = preproc_img(image_path + file, d=d, proj_model=model)
@@ -264,41 +268,47 @@ def generate_RSA_t(
                     probabilities_target = nnf.softmax(top_logits_target, dim=-1)             
                     distr_probs = [nnf.softmax(logits, dim=-1) for logits in distr_top_logits]
                     if l0_prob_target < t: 
-                        # pragmatic reasoning 
-                        s0_probs = [probabilities_target] + distr_probs
-                        #print("s0_probs size:", s0_probs[0].size())
+                        if pos_decoding: 
+                            pos = get_pos(logits_target, probabilities_target)
+                        if pos: 
+                            # pragmatic reasoning 
+                            s0_probs = [probabilities_target] + distr_probs
+                            #print("s0_probs size:", s0_probs[0].size())
 
-                        l0_probs_no_n = [prob * image_priors[i] for i, prob in enumerate(s0_probs)]
+                            l0_probs_no_n = [prob * image_priors[i] for i, prob in enumerate(s0_probs)]
 
-                        l0_sum = sum(l0_probs_no_n)
+                            l0_sum = sum(l0_probs_no_n)
 
-                        l0_probs = [prob/l0_sum for prob in l0_probs_no_n]
-                        u = [torch.log(prob) for prob in l0_probs]
+                            l0_probs = [prob/l0_sum for prob in l0_probs_no_n]
+                            u = [torch.log(prob) for prob in l0_probs]
 
-                        #print("l0_probs size:", l0_probs[0].size())
-                        s1_probs_no_n = [torch.exp(a*utility - -torch.log(s0_probs[i])) for i, utility in enumerate(u)]
-                        s1_sum = torch.tensor([torch.sum(w) for w in s1_probs_no_n])
-                        s1_probs = [s1_prob/s1_sum[i] for i, s1_prob in enumerate(s1_probs_no_n)]
+                            #print("l0_probs size:", l0_probs[0].size())
+                            s1_probs_no_n = [torch.exp(a*utility - -torch.log(s0_probs[i])) for i, utility in enumerate(u)]
+                            s1_sum = torch.tensor([torch.sum(w) for w in s1_probs_no_n])
+                            s1_probs = [s1_prob/s1_sum[i] for i, s1_prob in enumerate(s1_probs_no_n)]
 
-                        target_probs = s1_probs[0]
+                            target_probs = s1_probs[0]
 
-                        # apply argmax function to target probabilities to extract the most probable next word 
-                        next_token = torch.argmax(target_probs, -1).unsqueeze(0)
-                        #print("l0_probs", l0_probs)
-                        l0_prob_target = l0_probs[0][0][next_token]
+                            # apply argmax function to target probabilities to extract the most probable next word 
+                            next_token = torch.argmax(target_probs, -1).unsqueeze(0)
+                            #print("l0_probs", l0_probs)
+                            l0_prob_target = l0_probs[0][0][next_token]
 
 
-                        if print_logits: 
-                            print("s0_probs", s0_probs)
-                            print("l0_probs before normalization", l0_probs_no_n)
-                            print("l0_sum", l0_sum)
-                            print("l0_probs after normalization", l0_probs)
-                            print("U", u)
-                            print("s1_probs before normalization", s1_probs_no_n)
-                            print("s1_sum", s1_sum)
-                            print("s1_probs after normalization", s1_probs)
+                            if print_logits: 
+                                print("s0_probs", s0_probs)
+                                print("l0_probs before normalization", l0_probs_no_n)
+                                print("l0_sum", l0_sum)
+                                print("l0_probs after normalization", l0_probs)
+                                print("U", u)
+                                print("s1_probs before normalization", s1_probs_no_n)
+                                print("s1_sum", s1_sum)
+                                print("s1_probs after normalization", s1_probs)
 
-                            print("next token index:", next_token)
+                                print("next token index:", next_token)
+                        else:
+                            no_rsa_pos.append(i)
+                            next_token = torch.argmax(probabilities_target, -1).unsqueeze(0)
                     else:
                         if RSA:
                             if t > 0:
@@ -335,8 +345,10 @@ def generate_RSA_t(
                 # append output to list of output sentences
                 generated_list.append((file, output_text))
                 rsa_stop_list.append(rsa_stop)
+                no_rsa_pos_list.append(no_rsa_pos)
 
-    return (generated_list, rsa_stop_list)
+    return (generated_list, rsa_stop_list, no_rsa_pos_list)
+)
 
 
 def rearrange_RSA(logits, distr_logits, image_priors, l0_probs_tokens = 0, top_k=100, t = 1, a=3, i = 0, RSA=True, pos = False, print_stops=False):
@@ -609,160 +621,24 @@ def generate_beam_RSA(df, entry_length=67, temperature = 1, stop_token = ".", to
 
 
 
-def generate_RSA_pos(
-        model,
-        tokenizer,
-        tokens=None,
-        target_embed=None,
-        distr_embeds=None,
-        entry_count=1,
-        entry_length=30,  # maximum number of words
-        top_k=100,
-        temperature=1.,
-        stop_token: str = '.',
-        a = 1,
-        print_logits = False,
-        t = 1
-):
-    model.eval()
-    generated_num = 0
-    generated_list = []
-    stop_token_index = tokenizer.encode(stop_token)[0]
-    filter_value = 0
-    device = next(model.parameters()).device
-    #l0_prob_target = 0 
-    #RSA = True
-    #rsa_stop = None
-    rsa_idx, greedy_idx = [], []
-    
-    with torch.no_grad():
+def get_pos(logits_target, probabilities_target, top_k=100):
+    _, sorted_indices_target = torch.sort(logits_target, descending=True)
+    # get top-k indices
+    #top_indices = sorted_indices_target.squeeze(0)[top_k+1:]
+    top_indices = sorted_indices_target.squeeze(0)[:top_k]
+    top_words = [re.sub("^ ", "", tokenizer.decode(ind)) for ind in top_indices]
+    top_words_tagged = nltk.pos_tag(top_words)
+    tags = [pos for w, pos in top_words_tagged]
 
-        for entry_idx in trange(entry_count):
-            if not None in [target_embed] + distr_embeds:
-                # one embedding per image (1 target, 2 distractors)
-                generated_target = target_embed
-                generated_distr = distr_embeds
-            else:
-                print("Embedding missing, generation stopped!")
-                break
-            image_priors = [1/(len(distr_embeds)+1) for embed in range(len(distr_embeds)+1)]
-            for i in range(entry_length):
-                # get output logits for each image from gpt model
-                logits_target = get_logits(generated_target, temperature)
-                distr_logits = [get_logits(distr, temperature) for distr in generated_distr]
-                #logits_distr1 = get_logits(generated_distr1, temperature)
-                #logits_distr2 = get_logits(generated_distr2, temperature)
-                #print("logits target:", logits_target)
-                #print("logits distr1:", logits_distr1)
+    c_tag_probs = 0
+    nc_tag_probs = 0
+    for tc, tag in enumerate(tags): 
+        if tag in content_tags: 
+            c_tag_probs += probabilities_target[0][tc]
+        else:
+            nc_tag_probs += probabilities_target[0][tc]
 
-                # sort token indices based on logit value 
-                _, sorted_indices_target = torch.sort(logits_target, descending=True)
-                # get top-k indices
-                #top_indices = sorted_indices_target.squeeze(0)[top_k+1:]
-                top_indices = sorted_indices_target.squeeze(0)[:top_k]
-                top_words = [re.sub("^ ", "", tokenizer.decode(ind)) for ind in top_indices]
-                top_words_tagged = nltk.pos_tag(top_words)
-                tags = [pos for w, pos in top_words_tagged]
-
-                
-                print("tags:", top_words_tagged)
-
-                #print("top_indices:", top_indices)
-
-                # set values of other tokens to - infinity 
-                top_logits_target = logits_target[:, top_indices] 
-                distr_top_logits = [logits[:, top_indices] for logits in distr_logits]
- 
-                #logits_target[:, top_indices] = filter_value
-                #print("logits_target: ", logits_target)
-                #logits_distr1[:, top_indices] = filter_value
-                #logits_distr2[:, top_indices] = filter_value
-
-                # apply softmax function to remaining logits
-                probabilities_target = nnf.softmax(top_logits_target, dim=-1)             
-                distr_probs = [nnf.softmax(logits, dim=-1) for logits in distr_top_logits]
-                
-                c_tag_probs = 0
-                nc_tag_probs = 0
-                for tc, tag in enumerate(tags): 
-                    if tag in content_tags: 
-                        c_tag_probs += probabilities_target[0][tc]
-                    else:
-                        nc_tag_probs += probabilities_target[0][tc]
-                
-                print("c_tag_probs: {}\n nc_tag_probs: {}".format(c_tag_probs, nc_tag_probs))
-                if c_tag_probs > nc_tag_probs: 
-                    rsa_idx.append(i)
-                    # pragmatic reasoning 
-                    s0_probs = [probabilities_target] + distr_probs
-                    #print("s0_probs size:", s0_probs[0].size())
-
-                    l0_probs_no_n = [prob * image_priors[i] for i, prob in enumerate(s0_probs)]
-
-                    l0_sum = sum(l0_probs_no_n)
-
-                    l0_probs = [prob/l0_sum for prob in l0_probs_no_n]
-                    u = [torch.log(prob) for prob in l0_probs]
-
-                    #print("l0_probs size:", l0_probs[0].size())
-                    s1_probs_no_n = [torch.exp(a*utility - -torch.log(s0_probs[i])) for i, utility in enumerate(u)]
-                    s1_sum = torch.tensor([torch.sum(w) for w in s1_probs_no_n])
-                    s1_probs = [s1_prob/s1_sum[i] for i, s1_prob in enumerate(s1_probs_no_n)]
-
-                    target_probs = s1_probs[0]
-                    
-                    # apply argmax function to target probabilities to extract the most probable next word 
-                    next_token = torch.argmax(target_probs, -1).unsqueeze(0)
-                    #print("l0_probs", l0_probs)
-                    #l0_prob_target = l0_probs[0][0][next_token]
-                    
-                    next_token_index = top_indices[next_token]
-                    next_token_index = next_token_index.squeeze().cpu().numpy()
-                    print("RSA decoding: next word: ", tokenizer.decode(next_token_index))
-
-          
-                    if print_logits: 
-                        print("s0_probs", s0_probs)
-                        print("l0_probs before normalization", l0_probs_no_n)
-                        print("l0_sum", l0_sum)
-                        print("l0_probs after normalization", l0_probs)
-                        print("U", u)
-                        print("s1_probs before normalization", s1_probs_no_n)
-                        print("s1_sum", s1_sum)
-                        print("s1_probs after normalization", s1_probs)
-
-                        print("next token index:", next_token)
-                else:
-                    # greedy decoding
-                    greedy_idx.append(i)
-                    next_token = torch.argmax(probabilities_target, -1).unsqueeze(0)
-                    next_token_index = top_indices[next_token]
-                    next_token_index = next_token_index.squeeze().cpu().numpy()
-                    print("greedy decoding: next word: ", tokenizer.decode(next_token_index))
-
-
-                # extract embeddings for output word 
-                next_token_index = top_indices[next_token]
-                next_token_embed = model.gpt.transformer.wte(next_token_index)
-                if tokens == None:
-                    tokens = next_token_index
-                else:
-                    # add token to output
-                    tokens = torch.cat((tokens, next_token_index), dim=1)
-                # add next token embedding to image embeddings for each image
-                generated_target = torch.cat((generated_target, next_token_embed), dim=1)
-                generated_distr = [torch.cat((gen, next_token_embed), dim=1) for gen in generated_distr]
-                # stop generating when the stop token is generated
-                if stop_token_index == next_token_index.item():
-                    break
-            # get list of generated output sequence
-            output_list = list(tokens.squeeze().cpu().numpy())
-            # convert token IDs to tokens 
-            output_text = tokenizer.decode(output_list)
-            # append output to list of output sentences
-            generated_list.append(output_text)
-
-    return (generated_list, (rsa_idx, greedy_idx))
+    return(c_tag_probs > nc_tag_probs)
 
 
 # select decoding method (beam search, greedy search or RSA-based search), including temperature parameter and 
