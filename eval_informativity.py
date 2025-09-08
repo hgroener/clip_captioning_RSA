@@ -10,7 +10,10 @@ from transformers import GPT2Tokenizer
 tokenizer = GPT2Tokenizer.from_pretrained("gpt2")
 CUDA = get_device
 device = CUDA(0) 
-save_path = os.path.join(os.path.dirname(os.getcwd()), "pretrained_models")
+
+current_folder = os.path.dirname( os.path.abspath(__file__))
+parent_folder =  os.path.dirname(current_folder)
+save_path = os.path.join(parent_folder, "pretrained_models")
 eval_model_path = os.path.join(save_path, 'coco_weights.pt')
 download_eval_model=False
 

@@ -24,10 +24,10 @@ RSA_options = ["greedy", "RSA", "RSA_t", "RSA_POS"]
 decoding_options = ["greedy", "beam_search"]
 
 
-RSA_dic = {"greedy": {"t": 0, "cname": "greedy_caps", "func": "RSA_t"}, 
-           "RSA": {"t": 1, "cname": "RSA_caps", "func": "RSA_t"}, 
-           "RSA_t": {"t": 0.5, "cname": "RSA_t_caps", "func": "RSA_t"},
-           "RSA_POS": {"t": 1, "cname": "RSA_POS_caps", "func": "RSA_POS"}}
+RSA_dic = {"greedy": {"t": 0, "pos": False, "cname": "greedy_caps"}, 
+           "RSA": {"t": 1,"pos": False, "cname": "RSA_caps"}, 
+           "RSA_t": {"t": 0.5, "pos": False, "cname": "RSA_t_caps"},
+           "RSA_POS": {"t": 1, "pos": False, "cname": "RSA_POS_caps"}}
 
 
 ## TESTING
@@ -71,35 +71,27 @@ def test(df, t=1, pos = False, beam_search = False, a=3, top_k=100, temp=0.8, ta
 
     return(df, (mean_cider, mean_informative))
 
+def main(test_file, target_dir):
+    test_df = pd.read_csv(test_file)
+    for rsa, decoding in itertools.product(list(RSA_dic.keys()), decoding_options):
+        beam_search = True if decoding=="beam_search" else False
+
+        test_df, scores = test(test_df, beam_search=beam_search, pos=RSA_dic[rsa]["pos"], t=RSA_dic[rsa]["t"], 
+                               target_dir=target_dir + "{}/{}/".format(decoding, rsa), 
+                               cname="caps_{}_{}".format(decoding, rsa), presave=True, 
+                               results_file="test_{}_{}.json".format(decoding, rsa), 
+                               results_csv="test_{}_{}.csv".format(decoding, rsa), 
+                               score_file = "test_scores_{}_{}.txt".format(decoding, rsa), k=3, group_by="scene_idx")
+
+
 
 if __name__=="__main__":
-    test_df = pd.read_csv("other/clip_captioning_RSA/data/AbstractScenes_v1.1/processed_data/test_df_r3.csv")
-    for rsa, decoding in itertools.product(list(RSA_dic.keys()), decoding_options):
-        if decoding=="beam_search":
-            if rsa == "RSA_POS":
-                test_df, scores = test(test_df, beam_search=True, pos=True, t=1, target_dir="./data/AbstractScenes_v1.1/testing/{}/{}/".format(decoding, rsa), 
-                                       cname="caps_{}_{}".format(decoding, rsa), presave=True, results_file="test_{}_{}.json".foramt(decoding, rsa), 
-                                       results_csv="test_{}_{}.csv".format(decoding, rsa), score_file = "test_scores_{}_{}.txt".format(decoding, rsa),
-                                       k=3, group_by="scene_idx")
-            elif rsa == "RSA_t":
-                test_df, scores = test(test_df, beam_search=True, pos=False,t=0.5, target_dir="./data/AbstractScenes_v1.1/testing/{}/{}/".format(decoding, rsa), 
-                    cname="caps_{}_{}".format(decoding, rsa), presave=True, results_file="test_{}_{}.json".foramt(decoding, rsa), 
-                    results_csv="test_{}_{}.csv".format(decoding, rsa), score_file = "test_scores_{}_{}.txt".format(decoding, rsa),
-                    k=3, group_by="scene_idx")
-        else: 
+    #test_file = "other/clip_captioning_RSA/data/AbstractScenes_v1.1/processed_data/test_df_r3.csv"
+    
+    test_file = current_folder + "/temp/debug/df_debug.csv"
+    target_dir = current_folder + "/data/AbstractScenes_v1.1/testing/"
+    main(test_file, target_dir)
 
 
-    test_df_r3 = pd.read_csv("./data/AbstractScenes_v1.1/processed_data/test_df_r3.csv")
-     
-
-
-    test_df, scores = test(df_test_triplets, t=1, target_dir="./data/AbstractScenes_v1.1/testing/", cname="actual_caps_RSA", presave=True,
-                        results_file="results_test_actual_RSA_random_triplets.json", results_csv="test_actual_RSA_random_triplets.csv", 
-                        score_file = "test_scores_actual_RSA_random_triplets.txt", k=3, group_by="triplet_idx")
-
-    test_df, scores = test(reduced_df, t=1, target_dir="./data/AbstractScenes_v1.1/testing/", cname="RSA_caps", presave=True,
-                        results_file="results_test_RSA_r3.json", results_csv="test_RSA_r3.csv", 
-                        score_file = "test_scores_RSA_r3.txt", k=3)
-
-    print(scores)
+    
 
