@@ -12,7 +12,7 @@ import torch
 import torch.nn.functional as nnf
 import sys
 from typing import Tuple, List, Union, Optional
-from transformers import GPT2Tokenizer, GPT2LMHeadModel, get_linear_schedule_with_warmup
+from transformers import GPT2Tokenizer, GPT2LMHeadModel
 from tqdm.notebook import tqdm, trange
 #from google.colab import files
 import skimage.io as io
@@ -229,7 +229,8 @@ def generate_RSA(
     
     with torch.no_grad():
         scenes = [scene for scene in list(df[group_by]) if not scene in ["None", None]]
-        for scene in tqdm(list(set(scenes))):
+        scenes = list(set(scenes))
+        for scene in tqdm(scenes, total = len(scenes)):
             
             df_scene = df[df[group_by]==scene]
             for file in df_scene["file"]:

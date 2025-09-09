@@ -5,11 +5,22 @@ import pandas as pd
 import json 
 import re 
 import matplotlib.pyplot as plt 
+from os.path import dirname, abspath
+from transformers import GPT2Tokenizer
 
-from generate import generate_RSA_t
+
+from generate import generate_RSA, load_clip_model
 from eval_informativity import eval_informativity
 from cider.cidereval import eval_cider
 
+current_folder = dirname(abspath(__file__))
+parent_folder = dirname(current_folder)
+image_path=current_folder + "/data/AbstractScenes_v1.1/RenderedScenes/"
+save_path = os.path.join(parent_folder, "pretrained_models")
+model_path = os.path.join(save_path, 'conceptual_weights.pt')
+
+generation_model = load_clip_model(model_path)
+tokenizer = GPT2Tokenizer.from_pretrained("gpt2")
 ### hyperparameter tuning
 # hyperparameters
 temp_range = [i/100 for i in list(range(60,110,10))]
@@ -17,9 +28,11 @@ temp_range = [i/100 for i in list(range(60,110,10))]
 a_range = [3,4,5]
 #p_range = [i/100 for i in list(range(60,105,5))]
 
+
+
 # grid search
 
-def grid_search(train_df, combs, output_dir="./data/AbstractScenes_v1.1/parameter_tuning/", result_file= "results_finetuning_nn.json", generate=True, k=3):
+def grid_search(train_df, combs, output_dir=current_folder + "/data/AbstractScenes_v1.1/parameter_tuning/", result_file= "results_finetuning_nn.json", generate=True, k=3):
     os.makedirs(output_dir, exist_ok = True)
     #combs = itertools.product(temp_range, p_range)
     scores = {}
@@ -28,8 +41,9 @@ def grid_search(train_df, combs, output_dir="./data/AbstractScenes_v1.1/paramete
         key = "temp{}a{}".format(str(int(temp*100)), str(int(a)))
         if generate:
             print("generating captions with temperature={}, a={}".format(temp, a))
-            caps, _ = generate_RSA_t(model, tokenizer, train_df, temperature = temp, t=1, a=a, top_k=100)
-            train_df["train_cap"] = caps 
+            train_df, _, _ = generate_RSA(generation_model, tokenizer, train_df, temperature = temp, t=1, a=a, top_k=100, cname="train_cap", 
+                                    image_path=image_path)
+            #train_df["train_cap"] = caps 
         else: 
             print("loading captions generated with temperature={}, a={}".format(temp, a))
             train_df = pd.read_csv("./data/AbstractScenes_v1.1/parameter_tuning/{}.csv".format(key))
@@ -59,7 +73,7 @@ def grid_search(train_df, combs, output_dir="./data/AbstractScenes_v1.1/paramete
 
 
 
-def aggregate_scores(combs, scores, scores_path = "./data/AbstractScenes_v1.1/parameter_tuning/"):
+def aggregate_scores(combs, scores, scores_path = current_folder + "/data/AbstractScenes_v1.1/parameter_tuning/"):
 
     for temp, a in combs: 
         key = "temp{}a{}".format(str(int(temp*100)), str(int(a)))
@@ -109,15 +123,25 @@ def create_figs(scores, score_type="CIDEr", show=True, output_path=""):
 
 
 
-def main():
+def main(generate=True, score_file=None):
     combs = list(itertools.product(temp_range, a_range))
     print("number of hyperparameter combinations: {}".format(len(combs)))
 
-    df = pd.read_csv("./processed_data/train_df_r3.csv")
-    scores = grid_search(df, combs, result_file="results_finetuning_nn_r3.json", k=3)
+    df = pd.read_csv(current_folder + "/data/AbstractScenes_v1.1/processed_data/train_df_r3.csv")
+    if generate: 
+        scores = grid_search(df, combs, result_file="hp_tuning_scores.json", k=3)
+    elif score_file: 
+        with open(score_file) as f:
+            scores = json.load(f)
+    else: 
+        print("need to generate captions or provide score file.")
+        return
     cider_scores, inf_scores, mean_scores = aggregate_scores(combs, scores)
-    for f in [(cider_scores, "CIDEr score"), (inf_scores, "informativity"), (mean_scores, "mean")]
-        create_figs(f[0], score_type=f[1], output_path="./data/AbstractScenes_v1.1/parameter_tuning/figs", show=False)
+    for scores, fname in [(cider_scores, "cider_scores"), (inf_scores, "informativity_scores"), (mean_scores, "mean_scores")]:
+        with open("{}/data/AbstractScenes_v1.1/parameter_tuning/{}.json".format(current_folder, fname), "w+") as f: 
+            json.dump(scores,f)
+    for f in [(cider_scores, "CIDEr score"), (inf_scores, "informativity"), (mean_scores, "mean")]:
+        create_figs(f[0], score_type=f[1], output_path=current_folder + "/data/AbstractScenes_v1.1/parameter_tuning/figs/", show=False)
 
 
 
