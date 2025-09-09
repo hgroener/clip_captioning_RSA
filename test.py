@@ -20,14 +20,13 @@ model_path = os.path.join(save_path, 'conceptual_weights.pt')
 generation_model = gen.load_clip_model(model_path)
 tokenizer = GPT2Tokenizer.from_pretrained("gpt2")
 
-RSA_options = ["greedy", "RSA", "RSA_t", "RSA_POS"]
 decoding_options = ["greedy", "beam_search"]
 
 
-RSA_dic = {"greedy": {"t": 0, "pos": False, "cname": "greedy_caps"}, 
-           "RSA": {"t": 1,"pos": False, "cname": "RSA_caps"}, 
-           "RSA_t": {"t": 0.5, "pos": False, "cname": "RSA_t_caps"},
-           "RSA_POS": {"t": 1, "pos": False, "cname": "RSA_POS_caps"}}
+RSA_dic = {"no_RSA": {"t": 0, "pos": False}, 
+           "RSA": {"t": 1,"pos": False}, 
+           "RSA_t": {"t": 0.5, "pos": False},
+           "RSA_POS": {"t": 1, "pos": False}}
 
 
 ## TESTING
@@ -39,9 +38,9 @@ def test(df, t=1, pos = False, beam_search = False, a=3, top_k=100, temp=0.8, ta
     if generate:
         if not beam_search: 
             df,_, _ = gen.generate_RSA(generation_model, tokenizer, df, temperature = temp, t=t, a=a, top_k=top_k, group_by=group_by, pos_decoding=pos, 
-                                       image_path=image_path)
+                                       image_path=image_path, cname=cname)
         else:
-            df, _, _ = gen.generate_beam_RSA(df, temperature = temp, t=t, a=a, pos=pos, image_path=image_path)
+            df, _, _ = gen.generate_beam_RSA(df, temperature = temp, t=t, a=a, pos=pos, image_path=image_path, cname=cname)
         print("captions generated.")
         if presave: 
             df.to_csv(target_dir + results_csv)
@@ -60,7 +59,7 @@ def test(df, t=1, pos = False, beam_search = False, a=3, top_k=100, temp=0.8, ta
         scene_df = df[df[group_by]==scene]
         caps = list(scene_df[cname])
         files = list(scene_df["file"])
-        informative = [int(eval_informativity(cap, files[i], files, k=k)[2]) for i, cap in enumerate(caps)]
+        informative = [int(eval_informativity(cap, files[i], files, k=k, image_path=image_path)[2]) for i, cap in enumerate(caps)]
         df.loc[df[group_by]==scene, 'informative'] = informative
 
     df.to_csv(results_csv)
