@@ -10,29 +10,16 @@ from torch import nn
 import numpy as np
 import torch
 import torch.nn.functional as nnf
-import sys
 from typing import Tuple, List, Union, Optional
 from transformers import GPT2Tokenizer, GPT2LMHeadModel
-from tqdm.notebook import tqdm, trange
-#from google.colab import files
+from tqdm.notebook import tqdm
 import skimage.io as io
 import PIL.Image
-from IPython.display import Image 
-import matplotlib.pyplot as plt
 
-import itertools
-#import functools
-import random as rd
 import gdown
-import json
 import nltk
 import re 
-#from wordfreq import word_frequency
-#from sklearn.model_selection import train_test_split 
-import random as rd
-import itertools 
 
-from cider.cidereval import eval_cider
 
 #nltk.download()
 content_tags = ["JJ", "JJR", "JJS", "NN", "NNS", "NNP", "NNPS", "RB" , "RBR", "RBS", "VB", 
@@ -66,6 +53,7 @@ def get_device(device_id: int) -> D:
 
 CUDA = get_device   
 is_gpu = True
+device = CUDA(0) if is_gpu else "cpu"
 
 
 d = dirname(dirname(abspath(__file__)))
@@ -75,6 +63,10 @@ save_path =  d + "/pretrained_models/"
 print("save_path:", save_path)
 #os.makedirs(save_path, exist_ok=True)
 model_path = os.path.join(save_path, 'conceptual_weights.pt')
+
+clip_model, preprocess = clip.load("ViT-B/32", device=device, jit=False)
+
+tokenizer = GPT2Tokenizer.from_pretrained("gpt2")
 
 
 #@title Model
@@ -133,7 +125,7 @@ class ClipCaptionPrefix(ClipCaptionModel):
         self.gpt.eval()
         return self
     
-
+#@title Choose pretrained model - COCO or Coneptual captions
 def download_model(name, model_path = model_path): 
     if name == 'Conceptual captions':
         id = "14pXWwB4Zm82rsDdvbGguLfx9F8aM7ovT"
@@ -147,7 +139,6 @@ def download_model(name, model_path = model_path):
     
 
 
-
 def load_clip_model(model_path, prefix_length=10):
     model = ClipCaptionModel(prefix_length)
     model.load_state_dict(torch.load(model_path, map_location=CPU)) 
@@ -157,18 +148,21 @@ def load_clip_model(model_path, prefix_length=10):
     return(model)
 
 
+download_generation_model = False
+if download_generation_model:
+    download_model("Conceptual captions", model_path=model_path)
+generation_model = load_clip_model(model_path)
+
+
+
 ## generation
 # get clip prefix embedding from image path 
-def preproc_img(path, proj_model=None, prefix_length = 10, d=False, resize_tuna=False):
+def preproc_img(path, proj_model=None, prefix_length = 10):
     # read image using scikit-image
     img = io.imread(path)
     # convert to PIL format 
     pil_img = PIL.Image.fromarray(img)
-    if resize_tuna:
-        pil_img=resize(pil_img, max_w, max_h)
-    # image is printed based on boolean value of d 
-    if d:
-        display(pil_img)
+
     # preprocess image using CLIP 
     pil_img = preprocess(pil_img).unsqueeze(0).to(device)
     with torch.no_grad():
@@ -232,8 +226,8 @@ def generate_RSA(
                 no_rsa_pos = []
 
                 #dnames = ["d_" + str(num) for num in range(6)]
-                target_embed = preproc_img(image_path + file, d=d, proj_model=model)
-                distr_embeds = [preproc_img(image_path + img, d=d, proj_model=model) for img in list(df_scene["file"]) if not img==file]
+                target_embed = preproc_img(image_path + file,  proj_model=model)
+                distr_embeds = [preproc_img(image_path + img, proj_model=model) for img in list(df_scene["file"]) if not img==file]
 
                 if not None in [target_embed] + distr_embeds:
                     # one embedding per image (1 target, 2 distractors)
@@ -475,8 +469,8 @@ def generate_beam_RSA(df, generation_model = None, tokenizer=None, entry_length=
             RSA = True
 
             #dnames = ["d_" + str(num) for num in range(6)]
-            embed = preproc_img(image_path + file, d=d, proj_model=generation_model)
-            distr_embeds = [preproc_img(image_path + img, d=d, proj_model=generation_model) for img in list(df_scene["file"]) if not img==file]
+            embed = preproc_img(image_path + file, proj_model=generation_model)
+            distr_embeds = [preproc_img(image_path + img, proj_model=generation_model) for img in list(df_scene["file"]) if not img==file]
             image_num = len(distr_embeds) + 1 
             image_priors =  torch.tensor([1/image_num]*image_num).to(device)
             l0_probs_tokens = torch.tensor([[0]*5]).to(device)
@@ -640,17 +634,8 @@ def get_pos(logits_target, probabilities_target, top_k=100):
 
 
 if __name__=="__main__":
+    
 
-
-    device = CUDA(0) if is_gpu else "cpu"
-    clip_model, preprocess = clip.load("ViT-B/32", device=device, jit=False)
-    tokenizer = GPT2Tokenizer.from_pretrained("gpt2")
-    #@title Choose pretrained model - COCO or Coneptual captions
-
-    download_generation_model = False
-    if download_generation_model:
-        download_model("Conceptual captions", model_path=model_path)
-    generation_model = load_clip_model(model_path)
 
     current_folder = dirname(abspath(__file__))
     image_path=current_folder + "/data/AbstractScenes_v1.1/RenderedScenes/"

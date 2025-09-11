@@ -4,7 +4,11 @@ from tqdm import tqdm
 import pandas as pd
 import json 
 import re 
-import matplotlib.pyplot as plt 
+import matplotlib.pyplot as plt
+plt.rcParams.update({
+    "text.usetex": True,
+    "font.family": "Adobe Garamond Pro"
+})
 from os.path import dirname, abspath
 from transformers import GPT2Tokenizer
 #import statistics
@@ -12,6 +16,7 @@ from scipy.stats import gmean
 from generate import generate_RSA, load_clip_model
 from eval_informativity import eval_informativity
 from cider.cidereval import eval_cider
+import numpy as np
 
 current_folder = dirname(abspath(__file__))
 parent_folder = dirname(current_folder)
@@ -103,22 +108,28 @@ def aggregate_scores(combs, scores, scores_path = current_folder + "/data/Abstra
 
 def create_figs(scores, score_type="CIDEr", show=True, output_path=""):
     plt.figure()
+    fig, ax = plt.subplots()
+    N = 10 # <- you can adjust the step here
 
     for a in list(set([a for temp, a, mean in scores])):
         a_scores = [p for p in scores if p[1]==a]
-        plt.plot([p[0] for p in a_scores], [p[2] for p in a_scores], label=str(a))
+        ax.plot([p[0] for p in a_scores], [p[2] for p in a_scores], label=str(a))
 
-    plt.title("decoding parameter testing")
-    plt.xlabel("temperature")
-    plt.ylabel(score_type)
-    plt.legend(loc="upper right", title="a")
+    ax.set_xticks(np.arange(min([p[0] for p in a_scores]), max([p[0] for p in a_scores]) + 1, N))
+    ax.set_xlabel("Temperatur")
+    ax.set_ylabel(score_type)
+    ax.legend(loc="upper right", title="a")
+
+
+
     if show: 
         plt.show()
 
     if output_path:
         if not os.path.exists(output_path):
             os.makedirs(output_path)
-        fname = output_path + score_type + '_scores.png'
+        #fname = output_path + score_type + '_scores.png'
+        fname = output_path + score_type + '_scores.pdf'
         plt.savefig(fname)
         print("{} figure saved to {}".format(score_type, fname))
 
@@ -142,8 +153,8 @@ def main(generate=True, score_file=None):
     for scores, fname in [(cider_scores, "cider_scores"), (inf_scores, "informativity_scores"), (hmean_scores, "hmean_scores")]:
         with open("{}/data/AbstractScenes_v1.1/parameter_tuning/{}.json".format(current_folder, fname), "w+") as f: 
             json.dump(scores,f)
-    for f in [(cider_scores, "CIDEr"), (inf_scores, "informativity"), (hmean_scores, "hmean")]:
-        create_figs(f[0], score_type=f[1], output_path=current_folder + "/data/AbstractScenes_v1.1/parameter_tuning/figs/", show=False)
+    for f in [(cider_scores, "CIDEr"), (inf_scores, "Informativität"), (hmean_scores, "hmean")]:
+        create_figs(f[0], score_type=f[1], output_path=current_folder + "/figures/", show=False)
 
 
 

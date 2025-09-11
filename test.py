@@ -12,7 +12,7 @@ from eval_informativity import eval_informativity
 from cider.cidereval import eval_cider
 
 
-DECODING_OPTIONS = ["greedy", "beam_search"]
+DECODING_OPTIONS = ["beam_search"]#"greedy", "beam_search"]
 RSA_OPTIONS = {#"no_RSA": {"t": 0, "pos": False}, 
            #"RSA": {"t": 1,"pos": False}, 
            #"RSA_t": {"t": 0.7, "pos": False},

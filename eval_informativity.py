@@ -29,15 +29,11 @@ def eval_informativity(caption, target_file, all_files, temperature=1, image_pat
     token_ps = []
     p = torch.tensor([1]*k)
     #target_embed = preproc_img(image_path + file, d=True)
-    embeds = [preproc_img(image_path + img, d=False) for img in all_files]
+    embeds = [preproc_img(image_path + img, proj_model=eval_model) for img in all_files]
     generated = embeds
     for tok in cap_tok:
         logits = [torch.softmax(get_logits(gen, temperature, model=eval_model), dim=-1) for gen in generated]
-
-        #print(tok)
         p_tok = torch.tensor([logit[0].detach()[tok] for logit in logits])
-        #p = [prob * tok_prob for prob, tok_prob in zip(p,p_tok)]
-
         p = p * p_tok
         token_ps.append(p_tok)
 
@@ -47,8 +43,6 @@ def eval_informativity(caption, target_file, all_files, temperature=1, image_pat
         generated = [torch.cat((gen.squeeze(dim=0), next_token_embed)).unsqueeze(dim=0) for gen in generated]
         
     p_norm = p/torch.sum(p)
-    #print("p_norm:", p_norm)
-    #print(list(scene["file"]))
     top_pic = all_files[torch.argmax(p_norm)]
     pred_true = int(top_pic==target_file)
     return(p_norm, top_pic, pred_true) #probabilities for each picture, chosen picture
