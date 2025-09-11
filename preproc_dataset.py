@@ -153,6 +153,7 @@ def main(no_names = True, r3=True, random_triplets = False, output_path = "./dat
     
 
 if __name__=="__main__":
+    print("starting tests...")
     main()
 
 

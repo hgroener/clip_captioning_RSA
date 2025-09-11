@@ -64,7 +64,9 @@ def get_device(device_id: int) -> D:
     return torch.device(f'cuda:{device_id}')
 
 
-CUDA = get_device
+CUDA = get_device   
+is_gpu = True
+
 
 d = dirname(dirname(abspath(__file__)))
 print("d:", d)
@@ -132,17 +134,6 @@ class ClipCaptionPrefix(ClipCaptionModel):
         return self
     
 
-#@title GPU/CPU
-is_gpu = True #@param {type:"boolean"}  
-#@title CLIP model + GPT2 tokenizer
-
-device = CUDA(0) if is_gpu else "cpu"
-clip_model, preprocess = clip.load("ViT-B/32", device=device, jit=False)
-tokenizer = GPT2Tokenizer.from_pretrained("gpt2")
-#@title Choose pretrained model - COCO or Coneptual captions
-
-download_generation_model = False
-
 def download_model(name, model_path = model_path): 
     if name == 'Conceptual captions':
         id = "14pXWwB4Zm82rsDdvbGguLfx9F8aM7ovT"
@@ -154,8 +145,7 @@ def download_model(name, model_path = model_path):
         
     gdown.download(id=id, output=model_path, quiet=False)
     
-if download_generation_model:
-    download_model("Conceptual captions", model_path=model_path)
+
 
 
 def load_clip_model(model_path, prefix_length=10):
@@ -166,11 +156,10 @@ def load_clip_model(model_path, prefix_length=10):
     model = model.to(device)
     return(model)
 
-generation_model = load_clip_model(model_path)
 
 ## generation
 # get clip prefix embedding from image path 
-def preproc_img(path, proj_model=generation_model, prefix_length = 10, d=False, resize_tuna=False):
+def preproc_img(path, proj_model=None, prefix_length = 10, d=False, resize_tuna=False):
     # read image using scikit-image
     img = io.imread(path)
     # convert to PIL format 
@@ -189,7 +178,7 @@ def preproc_img(path, proj_model=generation_model, prefix_length = 10, d=False, 
     return prefix_embed
 
 
-def get_logits(embeds, temperature, model=generation_model):
+def get_logits(embeds, temperature, model=None):
     #print("embeds size: ", embeds.size())
     outputs = model.gpt(inputs_embeds=embeds)
     logits = outputs.logits
@@ -256,8 +245,8 @@ def generate_RSA(
                 image_priors = [1/(len(distr_embeds)+1) for embed in range(len(distr_embeds)+1)]
                 for i in range(entry_length):
                     # get output logits for each image from gpt model
-                    logits_target = get_logits(generated_target, temperature)
-                    distr_logits = [get_logits(distr, temperature) for distr in generated_distr]
+                    logits_target = get_logits(generated_target, temperature, model=model)
+                    distr_logits = [get_logits(distr, temperature, model=model) for distr in generated_distr]
 
                     # sort token indices based on logit value 
                     _, sorted_indices_target = torch.sort(logits_target, descending=True)
@@ -464,11 +453,10 @@ def rearrange_RSA(logits, distr_logits, image_priors, l0_probs_tokens = 0, top_k
 
 
 
-def generate_beam_RSA(df, entry_length=67, temperature = 1, stop_token = ".", top_k = 100, t= 1, a=3, beam_size=5, 
+def generate_beam_RSA(df, generation_model = None, tokenizer=None, entry_length=67, temperature = 1, stop_token = ".", top_k = 100, t= 1, a=3, beam_size=5, 
                       image_path = "./data/AbstractScenes_v1.1/RenderedScenes/", d=False, pos=False, print_stops = False,
                       cname="caps_RSA"):
     generation_model.eval()
-    generated_num = 0
     generated_list = []
     rsa_stop_list = []
     pos_no_rsa_scene = []
@@ -507,12 +495,12 @@ def generate_beam_RSA(df, entry_length=67, temperature = 1, stop_token = ".", to
                 else:
                     print("please input embeds!")
                 for i in range(entry_length):
-                    logits = get_logits(generated, temperature=temperature)
+                    logits = get_logits(generated, temperature=temperature, model=generation_model)
                     #print("logits size:", logits.shape)
                     #outputs = model.gpt(inputs_embeds=generated)
                     #distr_outputs = (model.gpt(input_embeds=distr) for distr in generated_distr)
                     #logits = outputs.logits
-                    distr_logits = [get_logits(embed, temperature=temperature) for embed in generated_distr]
+                    distr_logits = [get_logits(embed, temperature=temperature, model=generation_model) for embed in generated_distr]
                     #logits = logits[:, -1, :] / (temperature if temperature > 0 else 1.0)
                     #logits = logits.softmax(-1).log()
                     logits = logits.softmax(-1)
@@ -652,6 +640,18 @@ def get_pos(logits_target, probabilities_target, top_k=100):
 
 
 if __name__=="__main__":
+
+
+    device = CUDA(0) if is_gpu else "cpu"
+    clip_model, preprocess = clip.load("ViT-B/32", device=device, jit=False)
+    tokenizer = GPT2Tokenizer.from_pretrained("gpt2")
+    #@title Choose pretrained model - COCO or Coneptual captions
+
+    download_generation_model = False
+    if download_generation_model:
+        download_model("Conceptual captions", model_path=model_path)
+    generation_model = load_clip_model(model_path)
+
     current_folder = dirname(abspath(__file__))
     image_path=current_folder + "/data/AbstractScenes_v1.1/RenderedScenes/"
     df = pd.read_csv(current_folder + "/data/AbstractScenes_v1.1/processed_data/train_df_r3.csv")
