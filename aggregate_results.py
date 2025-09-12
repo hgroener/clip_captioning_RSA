@@ -17,11 +17,13 @@ for rsa, decoding in itertools.product(RSA_OPTIONS.keys(), DECODING_OPTIONS):
     t, pos = RSA_OPTIONS[rsa].values()
     rsa_bool = rsa!="no_RSA"
     rsa_int = int(rsa_bool)
-    decoding = "beam search" if decoding=="beam_search" else "greedy"
+    decoding = "Beam Search" if decoding=="beam_search" else "Greedy"
     t_dic = {"0": "n.a.", "1": "0", "0.7": "1"}
     t = t_dic[str(t)]
     pos = int(pos)
-    score_dics.append({"decoding": decoding, "RSA": rsa_int, "t": t, "POS": pos, "CIDEr": scores["cider"], "informativity": scores["informative"]})
+    cider = "%.2f" % round(scores["cider"] * 100, 2)
+    informative = "%.2f" % round(scores["informative"], 2)
+    score_dics.append({"Dekodierung": decoding, "RSA": rsa_int, "t": t, "POS": pos, "CIDEr": cider, "Informativität": informative})
 
 ## aggregating scores
 
