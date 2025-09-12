@@ -16,10 +16,17 @@ for rsa, decoding in itertools.product(RSA_OPTIONS.keys(), DECODING_OPTIONS):
 
     t, pos = RSA_OPTIONS[rsa].values()
     rsa_bool = rsa!="no_RSA"
-    score_dics.append({"decoding": decoding, "RSA": rsa_bool, "t": t, "POS": pos, "CIDEr": scores["cider"], "informativity": scores["informative"]})
+    rsa_int = int(rsa_bool)
+    decoding = "beam search" if decoding=="beam_search" else "greedy"
+    t_dic = {"0": "n.a.", "1": "0", "0.7": "1"}
+    t = t_dic[str(t)]
+    pos = int(pos)
+    score_dics.append({"decoding": decoding, "RSA": rsa_int, "t": t, "POS": pos, "CIDEr": scores["cider"], "informativity": scores["informative"]})
 
 ## aggregating scores
 
 
 score_df = pd.DataFrame(score_dics)
-score_df.to_csv(test_path + "summary.csv")
+summary_file = test_path + "summary.csv"
+score_df.to_csv(summary_file)
+print("Aggregated test scores saved to {}".format(summary_file))
