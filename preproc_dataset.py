@@ -54,10 +54,10 @@ def get_pic_df(cap_df, output_path="./data/AbstractScenes_v1.1/imagewise_df.csv"
     return(pic_df)
 
 def substitute_names(pic_df, output_path="./data/AbstractScenes_v1.1/imagewise_df_nn.csv"):
-    pic_df_no_names = pic_df.copy()
+    #pic_df_no_names = pic_df.copy()
     for c in range(6):
         col = "cap"+str(c)
-        caps = pic_df[col]
+        caps = list(pic_df[col])
         new_caps=[]
         for cap in caps:
             if type(cap)==str:
@@ -69,11 +69,11 @@ def substitute_names(pic_df, output_path="./data/AbstractScenes_v1.1/imagewise_d
                 new_caps.append(cap_new)
             else:
                 print("Error: caption: {} is of type {}".format(cap, type(cap)))
-                return
-        pic_df_no_names[col] = new_caps
+                new_caps.append("")
+        pic_df[col] = new_caps
     if output_path:
-        pic_df_no_names.to_csv(output_path)
-    return(pic_df_no_names)
+        pic_df.to_csv(output_path)
+    return(pic_df)
 
 
 def reduce_pics(df, k=3, output_path="./data/AbstractScenes_v1.1/processed_data/test_df_3samples.csv"):
@@ -140,6 +140,8 @@ def train_test_split(df, train_size=250, train_file=None, test_file=None):
 def main(no_names = True, r3=True, random_triplets = False, output_path = "./data/AbstractScenes_v1.1/processed_data/"):
     df = get_cap_df(sents_files)
     pic_df = get_pic_df(df)
+    if not os.path.exists(output_path):
+        os.makedirs(output_path)
     if no_names:
         pic_df = substitute_names(pic_df, output_path=output_path+"as_nn.csv")
     if r3:
@@ -153,7 +155,7 @@ def main(no_names = True, r3=True, random_triplets = False, output_path = "./dat
     
 
 if __name__=="__main__":
-    print("starting tests...")
+    print("preprocessing...")
     main()
 
 
