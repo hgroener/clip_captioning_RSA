@@ -513,6 +513,7 @@ def generate_beam_RSA(df, generation_model = None, tokenizer=None, entry_length=
                         scores = scores.squeeze(0)
                         #print("scores size {}\n next_tokens size {}".format(scores.shape, next_tokens.shape))
                         generated = generated.expand(beam_size, *generated.shape[1:])
+                        generated_distr = [distr.expand(beam_size, *distr.shape[1:]) for distr in generated_distr]
                         #print("size of ggitenerated after expansion: ", generated.shape)
                         next_tokens = next_tokens.permute(1, 0)
                         #print("size of next_tokens after permute:", next_tokens.shape)
@@ -563,6 +564,7 @@ def generate_beam_RSA(df, generation_model = None, tokenizer=None, entry_length=
                         tokens = torch.cat((tokens, next_tokens), dim=1)
                         #print("tokens after adding next_tokens", tokens)
                         generated = generated[next_tokens_source]
+                        generated_distr = [distr[next_tokens_source] for distr in generated_distr]
                         #print("size generated: ", generated.shape)
                         scores = scores_sum_average * seq_lengths
                         
@@ -571,6 +573,7 @@ def generate_beam_RSA(df, generation_model = None, tokenizer=None, entry_length=
                         #print("new is_stopped:", is_stopped)
                     next_token_embed = generation_model.gpt.transformer.wte(next_tokens.squeeze()).view(generated.shape[0], 1, -1)
                     generated = torch.cat((generated, next_token_embed), dim=1)
+                    generated_distr = [torch.cat((distr, next_token_embed), dim=1) for distr in generated_distr]
                     #print("size of generated after adding next_token_embed", generated.shape)
                     is_stopped = is_stopped + next_tokens.eq(stop_token_index).squeeze()
                     #print("is_stopped after scanning for stop_token_index", is_stopped)
@@ -634,21 +637,33 @@ def get_pos(logits_target, probabilities_target, top_k=100):
 
 
 if __name__=="__main__":
-    
+    '''
+        current_folder = dirname(abspath(__file__))
+        image_path=current_folder + "/data/AbstractScenes_v1.1/RenderedScenes/"
+        df = pd.read_csv(current_folder + "/data/AbstractScenes_v1.1/processed_data/train_df_r3.csv")
+        test_scenes = list(df["scene_idx"])[:10]
+        df = df[df["scene_idx"].isin(test_scenes)]
+        df, rsa_stop_list, _ = generate_RSA(generation_model, tokenizer, df, temperature=0.8, a=3, t = 0.7, cname="caps_RSA_t", 
+                                            image_path=image_path)
+        df, _, no_rsa_pos_list = generate_RSA(generation_model, tokenizer, df, temperature=0.8, a=3, t = 1, pos_decoding=True, cname="caps_RSA_pos", image_path=image_path)
+        df.to_csv(current_folder + "/temp/test_df.csv")
+        with open(current_folder + "/temp/RSA_stop_lists.txt", "w+") as f: 
+            f.write(str(rsa_stop_list))
+            f.write(str(no_rsa_pos_list))
 
-
+    '''
     current_folder = dirname(abspath(__file__))
     image_path=current_folder + "/data/AbstractScenes_v1.1/RenderedScenes/"
-    df = pd.read_csv(current_folder + "/data/AbstractScenes_v1.1/processed_data/train_df_r3.csv")
+    df = pd.read_csv(current_folder + "/data/AbstractScenes_v1.1/processed_data/train_df.csv")
     test_scenes = list(df["scene_idx"])[:10]
     df = df[df["scene_idx"].isin(test_scenes)]
+    '''
     df, rsa_stop_list, _ = generate_RSA(generation_model, tokenizer, df, temperature=0.8, a=3, t = 0.7, cname="caps_RSA_t", 
                                         image_path=image_path)
     df, _, no_rsa_pos_list = generate_RSA(generation_model, tokenizer, df, temperature=0.8, a=3, t = 1, pos_decoding=True, cname="caps_RSA_pos", image_path=image_path)
+    '''
+    df, rsa_stop_list, pos_no_rsa_scene = generate_beam_RSA(df, generation_model, tokenizer, image_path=image_path, t=1)
     df.to_csv(current_folder + "/temp/test_df.csv")
-    with open(current_folder + "/temp/RSA_stop_lists.txt", "w+") as f: 
-        f.write(str(rsa_stop_list))
-        f.write(str(no_rsa_pos_list))
 
 
 

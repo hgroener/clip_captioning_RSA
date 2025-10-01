@@ -250,7 +250,7 @@ def generate_RSA(
                     _, sorted_indices_target = torch.sort(logits_target, descending=True)
                     
                     # get top-k indices
-                    top_indices = sorted_indices_target.squeeze(0)[:top_k]
+                    top_indices = sorted_indices_target.squeeze(0)#[:top_k]
                     #print("top_indices:", top_indices)
 
                     # select top-k logits for target and distractors
@@ -348,6 +348,7 @@ def rearrange_RSA(logits, distr_logits, image_priors, l0_probs_tokens = 0, top_k
 
     #topk_scores, topk_tokens = logits.topk(top_k, -1)
     top_logits_target = logits
+    l0_probs_target = torch.zeros(*top_logits_target.shape)
 
     pos_no_rsa = None 
     if pos:
@@ -382,14 +383,14 @@ def rearrange_RSA(logits, distr_logits, image_priors, l0_probs_tokens = 0, top_k
         s0_probs = torch.stack([top_logits_target] + distr_top_logits)
         l0_probs_no_n = s0_probs * image_priors[:,None,None]
 
-        l0_sum = torch.sum(l0_probs_no_n, 2)
+        l0_sum = torch.sum(l0_probs_no_n, 0)
 
-        l0_probs = torch.div(l0_probs_no_n,l0_sum[:,None])
+        l0_probs = torch.div(l0_probs_no_n,l0_sum[None])
         u = torch.log(l0_probs)
 
         s1_probs_no_n = torch.exp(a*u - -torch.log(s0_probs))
-        s1_sum = torch.sum(s1_probs_no_n, 2)
-        s1_probs = torch.div(s1_probs_no_n, s1_sum[:,None])
+        s1_sum = torch.sum(s1_probs_no_n, 0)
+        s1_probs = torch.div(s1_probs_no_n, s1_sum[None])
 
         top_logits_target = s1_probs[0]
         l0_probs_target = l0_probs[0]#generate.py
@@ -409,12 +410,15 @@ def rearrange_RSA(logits, distr_logits, image_priors, l0_probs_tokens = 0, top_k
             print("RSA disabled at index {} due to POS decoding".format(i))
         # set RSA to True again to keep checking for POS at next step
         RSA = True
-        
+    
+    top_logits_target = top_logits_target.nan_to_num()
+    l0_probs_target = l0_probs_target.nan_to_num()
+
     return(top_logits_target, l0_probs_target, RSA, rsa_stop, pos_no_rsa)
 
 
 
-def generate_beam_RSA(df, generation_model = None, tokenizer=None, entry_length=67, temperature = 1, stop_token = ".", top_k = 100, t= 1, a=3, beam_size=5, 
+def generate_beam_RSA(df, generation_model = None, tokenizer=None, entry_length=67, temperature = 1, stop_token = ".", top_k = 100, t=1, a=3, beam_size=5, 
                       image_path = "./data/AbstractScenes_v1.1/RenderedScenes/", d=False, pos=False, print_stops = False,
                       cname="caps_RSA"):
     generation_model.eval()
@@ -462,11 +466,19 @@ def generate_beam_RSA(df, generation_model = None, tokenizer=None, entry_length=
                                                                                                       l0_probs_tokens=l0_probs_tokens, top_k=top_k, 
                                                                                                       a=a, t=t, i=i, RSA=RSA, pos=pos, 
                                                                                                       print_stops=print_stops)
+                        top_logits_target = top_logits_target.nan_to_num()
                         scores, next_tokens = top_logits_target.topk(beam_size, -1)
                         l0_probs_tokens = l0_probs_tokens.gather(1, next_tokens)
                         scores = scores.squeeze(0)
                         generated = generated.expand(beam_size, *generated.shape[1:])
-                        tokens = next_tokens.permute(1, 0)
+                        generated_distr = [distr.expand(beam_size, *distr.shape[1:]) for distr in generated_distr]
+                        next_tokens = next_tokens.permute(1, 0)
+                        if tokens is None:
+                            tokens = next_tokens
+                        else:
+                            tokens = tokens.expand(beam_size, *tokens.shape[1:])
+                            tokens = torch.cat((tokens, next_tokens), dim=1)
+                            #print("tokens after concatenation: ", tokens) 
 
                     else:
                         top_logits_target, l0_probs_tokens, RSA, rsa_stop, pos_no_rsa = rearrange_RSA(logits, distr_logits, image_priors, 
@@ -480,6 +492,7 @@ def generate_beam_RSA(df, generation_model = None, tokenizer=None, entry_length=
                         seq_lengths[~is_stopped] += 1
 
                         scores_sum_average = scores_sum / seq_lengths[:, None]
+                        scores_sum_average = scores_sum_average.nan_to_num()
                         scores_sum_average, next_tokens = scores_sum_average.view(-1).topk(beam_size, -1)
                         
                         next_tokens_source = next_tokens // scores_sum.shape[1]
@@ -492,6 +505,7 @@ def generate_beam_RSA(df, generation_model = None, tokenizer=None, entry_length=
                         tokens = tokens[next_tokens_source]
                         tokens = torch.cat((tokens, next_tokens), dim=1)
                         generated = generated[next_tokens_source]
+                        generated_distr = [distr[next_tokens_source] for distr in generated_distr]
                         scores = scores_sum_average * seq_lengths
                         
                         is_stopped = is_stopped[next_tokens_source]
@@ -500,6 +514,7 @@ def generate_beam_RSA(df, generation_model = None, tokenizer=None, entry_length=
                     next_token_embed = next_token_embed.view(generated.shape[0], 1, -1)
 
                     generated = torch.cat((generated, next_token_embed), dim=1)
+                    generated_distr = [torch.cat((distr, next_token_embed), dim=1) for distr in generated_distr]
                     is_stopped = is_stopped + next_tokens.eq(stop_token_index).squeeze()
                     #print("is_stopped after scanning for stop_token_index", is_stopped)
 
@@ -573,7 +588,7 @@ if __name__=="__main__":
                                         image_path=image_path)
     df, _, no_rsa_pos_list = generate_RSA(generation_model, tokenizer, df, temperature=0.8, a=3, t = 1, pos_decoding=True, cname="caps_RSA_pos", image_path=image_path)
     '''
-    df, rsa_stop_list, pos_no_rsa_scene = generate_beam_RSA(df, generation_model, tokenizer, image_path=image_path)
+    df, rsa_stop_list, pos_no_rsa_scene = generate_beam_RSA(df, generation_model, tokenizer, image_path=image_path, t=1)
     df.to_csv(current_folder + "/temp/test_df.csv")
 
 
