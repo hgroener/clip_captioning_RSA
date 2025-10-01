@@ -75,7 +75,7 @@ def main(test_file, target_dir, model=None, tokenizer=None, image_path="/data/Ab
                                score_file = "test_scores_{}_{}.txt".format(decoding, rsa), k=3, group_by="scene_idx")
 
 
-
+        
 if __name__=="__main__":
     current_folder = dirname(abspath(__file__))
     parent_folder = dirname(current_folder)
@@ -89,7 +89,7 @@ if __name__=="__main__":
     test_file = current_folder + "/data/AbstractScenes_v1.1/processed_data/test_df_r3.csv"
     
     #test_file = current_folder + "/data/debug/df_debug.csv"
-    target_dir = current_folder + "/data/AbstractScenes_v1.1/testing/"
+    target_dir = current_folder + "/data/AbstractScenes_v1.1/testing2/"
     main(test_file, target_dir, model=generation_model, tokenizer=tokenizer, image_path=image_path)
 
 

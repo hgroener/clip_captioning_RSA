@@ -1,10 +1,11 @@
 # CLIP Captioning mit RSA-basiertem pragmatischem Decoding 
 ## von Hannes Gröner 
 ### Code abgewandelt von https://github.com/rmokady/CLIP_prefix_caption/tree/main/notebooks
+# error: line 380
 #@title Imports
 import pandas as pd
 import clip
-import os
+import os     
 from os.path import dirname, abspath
 from torch import nn
 import numpy as np
@@ -19,6 +20,9 @@ import PIL.Image
 import gdown
 import nltk
 import re 
+
+#os.environ["CUDA_LAUNCH_BLOCKING"]="1" 
+#os.environ["TORCH_USE_CUDA_DSA"] = "1" 
 
 
 #nltk.download()
@@ -54,6 +58,7 @@ def get_device(device_id: int) -> D:
 CUDA = get_device   
 is_gpu = True
 device = CUDA(0) if is_gpu else "cpu"
+print(f"device: {device}")
 
 
 d = dirname(dirname(abspath(__file__)))
@@ -244,12 +249,12 @@ def generate_RSA(
 
                     # sort token indices based on logit value 
                     _, sorted_indices_target = torch.sort(logits_target, descending=True)
+                    
                     # get top-k indices
-
-                    top_indices = sorted_indices_target.squeeze(0)[:top_k]
+                    top_indices = sorted_indices_target.squeeze(0)#[:top_k]
                     #print("top_indices:", top_indices)
 
-                    # set values of other tokens to - infinity 
+                    # select top-k logits for target and distractors
                     top_logits_target = logits_target[:, top_indices] 
                     distr_top_logits = [logits[:, top_indices] for logits in distr_logits]
 
@@ -340,22 +345,21 @@ def generate_RSA(
     return (df, rsa_stop_list, no_rsa_pos_list)
 
 
-def rearrange_RSA(logits, distr_logits, image_priors, l0_probs_tokens = 0, top_k=100, t = 1, a=3, i = 0, RSA=True, pos = False, print_stops=False):
+def rearrange_RSA(logits, distr_logits, image_priors, l0_probs_tokens = None, 
+                  top_k=100, t = 1, a=3, i = 0, RSA=True, pos = False, 
+                  print_stops=False, device="CUDA:0"):
 
-    # sort token indices based on logit value 
-    _, sorted_indices_target = torch.sort(logits, descending=True)
-    # get top-k indices
-    top_indices = sorted_indices_target.squeeze(0)[:top_k]
-
+    if l0_probs_tokens == None: 
+        l0_probs_tokens = torch.zeros(1,logits.shape[0]).to(device)
+    #topk_scores, topk_tokens = logits.topk(top_k, -1)
+    top_logits_target = logits
+    distr_top_logits = distr_logits
     
-    #print("logits size in function:", logits.shape)
-    topk_scores, topk_tokens = logits.topk(top_k, -1)
-
-    #print("topk_tokens:", topk_tokens.shape)
-    top_logits_target = logits.gather(1, topk_tokens)
 
     pos_no_rsa = None 
     if pos:
+
+        _, topk_tokens = top_logits_target.topk(top_k, -1)
         top_beam_words = [[re.sub("^ ", "", tokenizer.decode(ind)) for ind in beam] for beam in topk_tokens]
         top_beam_words_tagged = [nltk.pos_tag(top_words) for top_words in top_beam_words]
         beam_tags = [[pos for w, pos in top_words_tagged] for top_words_tagged in top_beam_words_tagged]
@@ -365,89 +369,59 @@ def rearrange_RSA(logits, distr_logits, image_priors, l0_probs_tokens = 0, top_k
         for beam_num, beam in enumerate(beam_tags): 
             for tc, tag in enumerate(beam): 
                 if tag in content_tags: 
-                    c_tag_probs += topk_scores[beam_num][tc]
+                    c_tag_probs += top_logits_target[beam_num][tc]
                 else:
-                    nc_tag_probs += topk_scores[beam_num][tc]
+                    nc_tag_probs += top_logits_target[beam_num][tc]
         
-        #print("c_tag_probs: {}\nnc_tag_probs: {}".format(c_tag_probs, nc_tag_probs))
         if c_tag_probs < nc_tag_probs: 
             RSA = False
             pos_no_rsa = i
             
                     
-    #print("size top_logits_target:", top_logits_target.shape)
-    distr_top_logits = [lg[:, topk_tokens].squeeze(0) for lg in distr_logits]
-    lookup_l0 = torch.zeros(topk_tokens.shape[0],50257).to(device)
-    # print("topk_tokens: {}\n topk_scores: {}\n, top_logits_target: {}".format(topk_tokens.shape, topk_scores.shape, top_logits_target.shape))
-    #print("maximum of l0_probs:", torch.max(torch.max(l0_probs_tokens, -1)[0]))
-    #print("size of l0_probs_tokens:",  l0_probs_tokens.shape)
     top_l0_prob = torch.max(l0_probs_tokens)
-    #print("top_l0_prob:", top_l0_prob)
-    #print("top_l0_prob size:", top_l0_prob.shape)
-    #print("top_l0_prob:", top_l0_prob)
     rsa_stop = None
 
     if RSA and (top_l0_prob.item() < t): 
         # pragmatic reasoning 
+        # RuntimeError: stack expects each tensor to be equal size, but got [5, 50257] at entry 0 and [1, 50257] at entry 1
         s0_probs = torch.stack([top_logits_target] + distr_top_logits)
-        #print("s0_probs:", s0_probs)
-        #print("s0_probs size:", s0_probs.size())
         l0_probs_no_n = s0_probs * image_priors[:,None,None]
 
-        #print("l0_probs_no_n size:", l0_probs_no_n.shape)
-        l0_sum = torch.sum(l0_probs_no_n, 2)
-        #print("size l0_sum:", l0_sum.shape)
-        l0_probs = torch.div(l0_probs_no_n,l0_sum[:,:,None])
-        #print("l0_probs size:", l0_probs.shape)
-        u = torch.log(l0_probs)#[torch.log(prob) for prob in l0_probs]
-        #print("u:", u.shape)
+        l0_sum = torch.sum(l0_probs_no_n, 0)
 
-        #print("l0_probs size:", l0_probs[0].size())
-        #print("-torch.log(s0_probs[i]):", [-torch.log(s0_probs[i]) for i, ut in enumerate(u)])
+        l0_probs = torch.div(l0_probs_no_n,l0_sum[None])
+        u = torch.log(l0_probs)
+
         s1_probs_no_n = torch.exp(a*u - -torch.log(s0_probs))
-        #print(s1_probs_no_n.shape)
-        #print("s1_probs before normalization:", s1_probs_no_n)
         s1_sum = torch.sum(s1_probs_no_n, 2)
-        #print("s1_sum size:", s1_sum.shape)
-        s1_probs = torch.div(s1_probs_no_n, s1_sum[:,:,None])
-        #print("s1_probs:", s1_probs)
+        s1_probs = torch.div(s1_probs_no_n, s1_sum.unsqueeze(2))
 
         top_logits_target = s1_probs[0]
-        #print("top_logits_target size:", top_logits_target.shape)
-        #print("topk_tokens size:", topk_tokens.shape)
+        l0_probs_target = l0_probs[0]#generate.py
 
-        l0_probs_target = l0_probs[0]#[next_tokens]
-        #print("size l0_probs_target:", l0_probs_target.shape)
-        #print("l0_probs_target size:", l0_probs_target.shape)
-        
-        #print("lookup_l0 size:", lookup_l0.shape)
-        for dim in range(lookup_l0.shape[0]):
-            lookup_l0[dim][topk_tokens[dim]] = l0_probs_target[dim]
-
-    elif pos==False:
-        if RSA == True:
-            if print_stops:
-                print("stopped RSA decoding after {} words with highest l0 probability = {}".format(i, top_l0_prob))
-            RSA = False
-            rsa_stop = i 
-    
     else:
-        if print_stops:
-            print("RSA disabled at index {} due to POS decoding".format(i))
-        # set RSA to True again to keep checking for POS at next step
-        RSA = True
-        
-    lookup = torch.zeros(topk_tokens.shape[0], 50257).to(device)
-    #print("topk_tokens size: {} \n top_logits_target size: {}".format(topk_tokens.shape, top_logits_target.shape))
-    for dim in range(lookup.shape[0]):
-        lookup[dim][topk_tokens[dim]] = top_logits_target[dim]
-    #("lookup size:", lookup.shape)
+        l0_probs_target = torch.zeros(*top_logits_target.shape).to(device)
+        if pos==False:
+            if RSA == True:
+                if print_stops:
+                    print("stopped RSA decoding after {} words with highest l0 probability = {}".format(i, top_l0_prob))
+                RSA = False
+                rsa_stop = i 
+    
+        else:
+            if print_stops:
+                print("RSA disabled at index {} due to POS decoding".format(i))
+            # set RSA to True again to keep checking for POS at next step
+            RSA = True
+    
+    top_logits_target = top_logits_target.nan_to_num()
+    l0_probs_target = l0_probs_target.nan_to_num()
 
-    return(lookup, lookup_l0, RSA, rsa_stop, pos_no_rsa)
+    return(top_logits_target, l0_probs_target, RSA, rsa_stop, pos_no_rsa)
 
 
 
-def generate_beam_RSA(df, generation_model = None, tokenizer=None, entry_length=67, temperature = 1, stop_token = ".", top_k = 100, t= 1, a=3, beam_size=5, 
+def generate_beam_RSA(df, generation_model = None, tokenizer=None, entry_length=67, temperature = 1, stop_token = ".", top_k = 100, t=1, a=3, beam_size=5, 
                       image_path = "./data/AbstractScenes_v1.1/RenderedScenes/", d=False, pos=False, print_stops = False,
                       cname="caps_RSA"):
     generation_model.eval()
@@ -455,7 +429,6 @@ def generate_beam_RSA(df, generation_model = None, tokenizer=None, entry_length=
     rsa_stop_list = []
     pos_no_rsa_scene = []
     stop_token_index = tokenizer.encode(stop_token)[0]
-    #filter_value = 0
     device = next(generation_model.parameters()).device
     pos_no_rsa_sum = 0
     length_sum = 0
@@ -468,12 +441,10 @@ def generate_beam_RSA(df, generation_model = None, tokenizer=None, entry_length=
             tokens = None
             RSA = True
 
-            #dnames = ["d_" + str(num) for num in range(6)]
             embed = preproc_img(image_path + file, proj_model=generation_model)
             distr_embeds = [preproc_img(image_path + img, proj_model=generation_model) for img in list(df_scene["file"]) if not img==file]
             image_num = len(distr_embeds) + 1 
-            image_priors =  torch.tensor([1/image_num]*image_num).to(device)
-            l0_probs_tokens = torch.tensor([[0]*5]).to(device)
+            image_priors = torch.tensor([1/image_num]*image_num).to(device)
             generation_model.eval()
             stop_token_index = tokenizer.encode(stop_token)[0]
             scores = None
@@ -481,102 +452,73 @@ def generate_beam_RSA(df, generation_model = None, tokenizer=None, entry_length=
             seq_lengths = torch.ones(beam_size, device=device)
             is_stopped = torch.zeros(beam_size, device=device, dtype=torch.bool)
             pos_no_rsa_sent = []
-            #print("seq_lenghths {}\n is stopped {}".format(seq_lengths, is_stopped))
+
             with torch.no_grad():
-                if embed is not None:
-                    generated = embed
-                    generated_distr = distr_embeds
-                else:
-                    print("please input embeds!")
+                generated = embed
+                generated_distr = distr_embeds
+
                 for i in range(entry_length):
                     logits = get_logits(generated, temperature=temperature, model=generation_model)
-                    #print("logits size:", logits.shape)
-                    #outputs = model.gpt(inputs_embeds=generated)
-                    #distr_outputs = (model.gpt(input_embeds=distr) for distr in generated_distr)
-                    #logits = outputs.logits
                     distr_logits = [get_logits(embed, temperature=temperature, model=generation_model) for embed in generated_distr]
-                    #logits = logits[:, -1, :] / (temperature if temperature > 0 else 1.0)
-                    #logits = logits.softmax(-1).log()
                     logits = logits.softmax(-1)
-                    #print("logits size after softmax:", logits.shape)
-                    #distr_logits = [lg.softmax(-1).log() for lg in distr_logits]
                     distr_logits = [lg.softmax(-1) for lg in distr_logits]
+
                     if scores is None:
-                        top_logits_target, l0_probs_tokens, RSA, rsa_stop, pos_no_rsa = rearrange_RSA(logits, distr_logits, image_priors, 
-                                                                                                      l0_probs_tokens=l0_probs_tokens, top_k=top_k, 
-                                                                                                      t=t, i =i, RSA=RSA, pos=pos, 
-                                                                                                      print_stops=print_stops)
+                        top_logits_target, l0_probs_target, RSA, rsa_stop, pos_no_rsa = rearrange_RSA(logits, distr_logits, image_priors, top_k=top_k, 
+                                                                                                      a=a, t=t, i=i, RSA=RSA, pos=pos, 
+                                                                                                      print_stops=print_stops, device=device)
+                        #top_logits_target = top_logits_target.nan_to_num()
                         scores, next_tokens = top_logits_target.topk(beam_size, -1)
-                        #print("l0_probs_tokens size: {}\nnext_tokens_size: {}".format(l0_probs_tokens.shape, next_tokens.shape))
-                        l0_probs_tokens = l0_probs_tokens.gather(1, next_tokens)
-                        #print("new l0_probs_tokens size:", l0_probs_tokens.shape)
+                        l0_probs_tokens = l0_probs_target.gather(1, next_tokens)
                         scores = scores.squeeze(0)
-                        #print("scores size {}\n next_tokens size {}".format(scores.shape, next_tokens.shape))
                         generated = generated.expand(beam_size, *generated.shape[1:])
                         generated_distr = [distr.expand(beam_size, *distr.shape[1:]) for distr in generated_distr]
-                        #print("size of ggitenerated after expansion: ", generated.shape)
                         next_tokens = next_tokens.permute(1, 0)
-                        #print("size of next_tokens after permute:", next_tokens.shape)
-                        #next_tokens, scores = next_tokens.squeeze(0), scores.squeeze(0)
                         if tokens is None:
                             tokens = next_tokens
                         else:
                             tokens = tokens.expand(beam_size, *tokens.shape[1:])
                             tokens = torch.cat((tokens, next_tokens), dim=1)
                             #print("tokens after concatenation: ", tokens) 
+
                     else:
-
-
-
-                        #topk_scores, topk_tokens = logits.topk(top_k, -1)
-                        #top_logits_target = logits[:, topk_tokens].squeeze(0).squeeze(0)
-                        #distr_top_logits = [lg[:, topk_tokens].squeeze(0).squeeze(0) for lg in distr_logits]
-                        top_logits_target, l0_probs_tokens, RSA, rsa_stop, pos_no_rsa = rearrange_RSA(logits, distr_logits, image_priors, 
-                                                                                                      l0_probs_tokens=l0_probs_tokens, top_k=top_k, t=t, 
-                                                                                                      i=i, RSA=RSA, pos=pos, print_stops=print_stops)
+                        top_logits_target, l0_probs_target, RSA, rsa_stop, pos_no_rsa = rearrange_RSA(logits, distr_logits, image_priors, 
+                                                                                                      l0_probs_tokens=l0_probs_tokens, top_k=top_k, a=a, 
+                                                                                                      t=t, i=i, RSA=RSA, pos=pos, print_stops=print_stops, device=device)
                         top_logits_target[is_stopped] = -float(np.inf)
                         top_logits_target[is_stopped, 0] = 0
-                        #scores, next_tokens = top_logits_target.topk(beam_size, -1)
-                        #print(scores.shape, top_logits_target.shape)
-                        #print("scores:", scores)
-                        #scores_sum = torch.add(scores[0][:,None], top_logits_target)
+
                         scores_sum = scores[:, None] + top_logits_target
-                        #print("scores_sum:", scores_sum)
+
                         seq_lengths[~is_stopped] += 1
-                        #print("seq_lengths after adding 1", seq_lengths)
+
                         scores_sum_average = scores_sum / seq_lengths[:, None]
+                        scores_sum_average = scores_sum_average#.nan_to_num()
                         scores_sum_average, next_tokens = scores_sum_average.view(-1).topk(beam_size, -1)
-                        #print("next_tokens:", next_tokens)
-                        #print("next_tokens size:", next_tokens.shape)
                         
-                        #print("scores_sum_average {}\n next_tokens after view operation {}".format(scores_sum_average, next_tokens))
                         next_tokens_source = next_tokens // scores_sum.shape[1]
                         
                         seq_lengths = seq_lengths[next_tokens_source]
                         next_tokens = next_tokens % scores_sum.shape[1]
-                    
-                        #print("scores_sum.shape[1]", scores_sum.shape[1])
                         next_tokens = next_tokens.unsqueeze(1)
-                        #print("next_tokens:", next_tokens)
-                        l0_probs_tokens = l0_probs_tokens.gather(1, next_tokens)
-                        #print("next_tokens_source", next_tokens_source)
+
+                        l0_probs_tokens = l0_probs_target.gather(1, next_tokens)
                         tokens = tokens[next_tokens_source]
                         tokens = torch.cat((tokens, next_tokens), dim=1)
-                        #print("tokens after adding next_tokens", tokens)
                         generated = generated[next_tokens_source]
                         generated_distr = [distr[next_tokens_source] for distr in generated_distr]
-                        #print("size generated: ", generated.shape)
                         scores = scores_sum_average * seq_lengths
                         
-                        #print("scores after multiplying by seq_lenghts", scores)
                         is_stopped = is_stopped[next_tokens_source]
-                        #print("new is_stopped:", is_stopped)
-                    next_token_embed = generation_model.gpt.transformer.wte(next_tokens.squeeze()).view(generated.shape[0], 1, -1)
+
+                    next_token_embed = generation_model.gpt.transformer.wte(next_tokens.squeeze())
+                    next_token_embed = next_token_embed.view(generated.shape[0], 1, -1)
+
                     generated = torch.cat((generated, next_token_embed), dim=1)
                     generated_distr = [torch.cat((distr, next_token_embed), dim=1) for distr in generated_distr]
-                    #print("size of generated after adding next_token_embed", generated.shape)
                     is_stopped = is_stopped + next_tokens.eq(stop_token_index).squeeze()
                     #print("is_stopped after scanning for stop_token_index", is_stopped)
+
                     if rsa_stop !=None:
                         rsa_stop_list.append(rsa_stop)
                     if pos_no_rsa != None:
@@ -586,15 +528,13 @@ def generate_beam_RSA(df, generation_model = None, tokenizer=None, entry_length=
                 pos_no_rsa_list.append(pos_no_rsa_sent)
                 
             scores = scores / seq_lengths
-            #print("final scores:", scores)
             output_list = tokens.cpu().numpy()
             output_texts = [tokenizer.decode(output[:int(length)]) for output, length in zip(output_list, seq_lengths)]
             order = scores.argsort(descending=True)
-            #print("order:", order)
             output_text = [output_texts[i] for i in order][0]
             # add seq_lenght of chosen output to overall seq lengths of outputs to calculate proportion of tokens that were generated using 
             # RSA decoding later
-            seq_length  =seq_lengths[order[0]]
+            seq_length = seq_lengths[order[0]]
             length_sum += seq_length
             
             generated_list.append((file, output_text))
@@ -608,8 +548,9 @@ def generate_beam_RSA(df, generation_model = None, tokenizer=None, entry_length=
             
         #pos_no_rsa_average = pos_no_rsa_sum/length_sum
         #no_rsa_t_average = sum(rsa_stop_list)/length_sum
-        for cap in generated_list: 
-            df.loc[df["file"]==cap[0], cname] = cap[1] 
+
+    for cap in generated_list: 
+        df.loc[df["file"]==cap[0], cname] = cap[1] 
         
     #return(df, rsa_stop_list, pos_no_rsa_scene, no_rsa_t_average, pos_no_rsa_average)
     return(df, rsa_stop_list, pos_no_rsa_scene)
@@ -637,24 +578,10 @@ def get_pos(logits_target, probabilities_target, top_k=100):
 
 
 if __name__=="__main__":
-    '''
-        current_folder = dirname(abspath(__file__))
-        image_path=current_folder + "/data/AbstractScenes_v1.1/RenderedScenes/"
-        df = pd.read_csv(current_folder + "/data/AbstractScenes_v1.1/processed_data/train_df_r3.csv")
-        test_scenes = list(df["scene_idx"])[:10]
-        df = df[df["scene_idx"].isin(test_scenes)]
-        df, rsa_stop_list, _ = generate_RSA(generation_model, tokenizer, df, temperature=0.8, a=3, t = 0.7, cname="caps_RSA_t", 
-                                            image_path=image_path)
-        df, _, no_rsa_pos_list = generate_RSA(generation_model, tokenizer, df, temperature=0.8, a=3, t = 1, pos_decoding=True, cname="caps_RSA_pos", image_path=image_path)
-        df.to_csv(current_folder + "/temp/test_df.csv")
-        with open(current_folder + "/temp/RSA_stop_lists.txt", "w+") as f: 
-            f.write(str(rsa_stop_list))
-            f.write(str(no_rsa_pos_list))
-
-    '''
+    
     current_folder = dirname(abspath(__file__))
     image_path=current_folder + "/data/AbstractScenes_v1.1/RenderedScenes/"
-    df = pd.read_csv(current_folder + "/data/AbstractScenes_v1.1/processed_data/train_df.csv")
+    df = pd.read_csv(current_folder + "/data/AbstractScenes_v1.1/processed_data/train_df_r3.csv")
     test_scenes = list(df["scene_idx"])[:10]
     df = df[df["scene_idx"].isin(test_scenes)]
     '''
@@ -662,8 +589,11 @@ if __name__=="__main__":
                                         image_path=image_path)
     df, _, no_rsa_pos_list = generate_RSA(generation_model, tokenizer, df, temperature=0.8, a=3, t = 1, pos_decoding=True, cname="caps_RSA_pos", image_path=image_path)
     '''
-    df, rsa_stop_list, pos_no_rsa_scene = generate_beam_RSA(df, generation_model, tokenizer, image_path=image_path, t=1)
-    df.to_csv(current_folder + "/temp/test_df.csv")
+
+                        
+    df, rsa_stop_list, pos_no_rsa_scene = generate_beam_RSA(df, generation_model, tokenizer, image_path=image_path, t=0.7, pos=True)
+    df.to_csv(current_folder + "/temp/test_df_t_pos.csv")
+
 
 
 
