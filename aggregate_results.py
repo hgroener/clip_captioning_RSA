@@ -6,8 +6,8 @@ from test import RSA_OPTIONS, DECODING_OPTIONS
 
 current_folder = os.path.dirname(os.path.abspath(__file__))
 
-test_path = current_folder + "/data/AbstractScenes_v1.1/testing/"
-output_csv_path = current_folder + "/output/csvs/"
+test_path = current_folder + "/data/AbstractScenes_v1.1/testing2/"
+output_csv_path = current_folder + "/output/test2/csvs/"
 score_dics = []
 for rsa, decoding in itertools.product(RSA_OPTIONS.keys(), DECODING_OPTIONS):
     fpath = "{}{}/{}/".format(test_path, decoding, rsa)
@@ -22,6 +22,7 @@ for rsa, decoding in itertools.product(RSA_OPTIONS.keys(), DECODING_OPTIONS):
     t_dic = {"0": "n.a.", "1": "0", "0.7": "1"}
     t = t_dic[str(t)]
     pos = int(pos)
+    pos = "n.a." if not rsa_bool else pos
     cider = "%.2f" % round(scores["cider"] * 100, 2)
     informative = "%.2f" % round(scores["informative"]*100, 2)
     score_dics.append({"Dekodierung": decoding, "RSA": rsa_int, "t": t, "POS": pos, "CIDEr [%]": cider, "Informativität [%]": informative})
@@ -30,6 +31,7 @@ for rsa, decoding in itertools.product(RSA_OPTIONS.keys(), DECODING_OPTIONS):
 
 
 score_df = pd.DataFrame(score_dics)
+os.makedirs(output_csv_path, exist_ok=True)
 summary_file = output_csv_path + "summary.csv"
 score_df.to_csv(summary_file, index=False)
 print("Aggregated test scores saved to {}".format(summary_file))
