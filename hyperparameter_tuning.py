@@ -135,13 +135,14 @@ def create_figs(scores, score_type="CIDEr", show=True, output_path=""):
 
 
 
-def main(generate=True, score_file=None):
+def main(generate=True, score_file=None, output_path=current_folder + "/output/hp_tuning/"):
+    os.makedirs(output_path, exist_ok=True)
     combs = list(itertools.product(temp_range, a_range))
     print("number of hyperparameter combinations: {}".format(len(combs)))
 
     df = pd.read_csv(current_folder + "/data/AbstractScenes_v1.1/processed_data/train_df_r3.csv")
     if generate: 
-        scores = grid_search(df, combs, result_file="hp_tuning_scores.json", k=3)
+        scores = grid_search(df, combs, output_dir=output_path, result_file="hp_tuning_scores.json", k=3)
     elif score_file: 
         with open(score_file) as f:
             scores = json.load(f)
@@ -151,14 +152,14 @@ def main(generate=True, score_file=None):
         return
     cider_scores, inf_scores, hmean_scores = aggregate_scores(combs, scores)
     for scores, fname in [(cider_scores, "cider_scores"), (inf_scores, "informativity_scores"), (hmean_scores, "hmean_scores")]:
-        with open("{}/data/AbstractScenes_v1.1/parameter_tuning/{}.json".format(current_folder, fname), "w+") as f: 
+        with open(output_path + fname, "w+") as f: 
             json.dump(scores,f)
     for f in [(cider_scores, "CIDEr"), (inf_scores, "Informativität"), (hmean_scores, "hmean")]:
-        create_figs(f[0], score_type=f[1], output_path=current_folder + "/figures/", show=False)
+        create_figs(f[0], score_type=f[1], output_path=output_path + "/figures/", show=False)
 
 
 
 if __name__=="__main__":
-    generate = False
+    generate = True
     score_file = "/srv/storage/hgroener/other/clip_captioning_RSA/data/AbstractScenes_v1.1/parameter_tuning/hp_tuning_scores.json"
     main(generate=generate, score_file=score_file)
