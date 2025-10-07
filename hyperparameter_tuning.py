@@ -78,7 +78,7 @@ def grid_search(train_df, combs, output_dir=current_folder + "/data/AbstractScen
 
 
 
-def aggregate_scores(combs, scores, scores_path = current_folder + "/data/AbstractScenes_v1.1/parameter_tuning/"):
+def aggregate_scores(combs, scores, scores_path = current_folder + "/output/hp_tuning/"):
 
     for temp, a in combs: 
         key = "temp{}a{}".format(str(int(temp*100)), str(int(a)))
@@ -160,6 +160,6 @@ def main(generate=True, score_file=None, output_path=current_folder + "/output/h
 
 
 if __name__=="__main__":
-    generate = True
-    score_file = "/srv/storage/hgroener/other/clip_captioning_RSA/data/AbstractScenes_v1.1/parameter_tuning/hp_tuning_scores.json"
+    generate = False
+    score_file = "/srv/storage/hgroener/other/clip_captioning_RSA/output/hp_tuning/hp_tuning_scores.json"
     main(generate=generate, score_file=score_file)
