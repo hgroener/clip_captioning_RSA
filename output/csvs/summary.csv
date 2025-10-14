@@ -1,9 +1,9 @@
 Dekodierung,RSA,t,POS,CIDEr [%],Informativität [%]
-Greedy,0,n.a.,0,6.70,72.36
-Beam Search,0,n.a.,0,5.27,68.12
-Greedy,1,0,0,5.30,95.89
-Beam Search,1,0,0,6.80,71.42
-Greedy,1,1,0,6.04,87.89
-Beam Search,1,1,0,5.47,66.84
-Greedy,1,0,1,5.64,81.69
-Beam Search,1,0,1,5.79,61.19
+Greedy,0,n.a.,n.a.,6.70,61.83
+Beam Search,0,n.a.,n.a.,5.27,59.73
+Greedy,1,0,0,5.31,83.57
+Beam Search,1,0,0,4.67,79.50
+Greedy,1,1,0,6.02,72.83
+Beam Search,1,1,0,4.89,64.78
+Greedy,1,0,1,5.61,81.56
+Beam Search,1,0,1,4.47,77.11
