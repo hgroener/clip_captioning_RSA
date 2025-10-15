@@ -21,7 +21,7 @@ conda activate clip_prefix_caption
 ```
 2. Einen "data"-Ordner erstellen, das Abstract-Scenes Dataset von https://www.microsoft.com/en-ph/download/details.aspx?id=52035 herunterladen und in den Ordner entpacken 
 
-3. Das Skript "preproc_dataset.py" ausführen. 
+3. Das Skript "preproc_dataset.py" ausführen, um das Dataset vorzuverarbeiten
 
 4. Das Skript "hyperparameter_tuning.py" oder "test.py" ausführen 
 
