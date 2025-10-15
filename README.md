@@ -1,13 +1,13 @@
-# Generierung pragmatischer Bildbeschreibungen auf Wortebene:
+# Generierung pragmatischer Bildbeschreibungen auf Wortebene
 ## Ein Balanceakt zwischen Qualität und Informativität
 
-## Implementierung für die Modulprüfung in "Methoden der angewandten Computerlinguistik"
+### Implementierung für die Modulprüfung in "Methoden der angewandten Computerlinguistik"
 
 
 ### Beschreibung  
 
 In diesem Git-Repository befindet sich die Implementierung zur Hausarbeit "Generierung pragmatischer Bildbeschreibungen auf Wortebene: Ein Balanceakt zwischen Qualität und Informativität" im Modul "Methoden der angewandten Computerlinguistik" mitsamt generierter Bildbeschreibungen und Evaluationsergebnisse. 
-
+g
 
 
 ### Ausführung des Codes
