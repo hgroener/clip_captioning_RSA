@@ -6,7 +6,7 @@
 
 ## Beschreibung  
 
-In diesem Git-Repository befindet sich die Implementierung zur Hausarbeit "Generierung pragmatischer Bildbeschreibungen auf Wortebene: Ein Balanceakt zwischen Qualität und Informativität" im Modul "Methoden der angewandten Computerlinguistik". 
+In diesem Git-Repository befindet sich die Implementierung zur Hausarbeit "Generierung pragmatischer Bildbeschreibungen auf Wortebene: Ein Balanceakt zwischen Qualität und Informativität" im Modul "Methoden der angewandten Computerlinguistik" mitsamt generierter Bildbeschreibungen und Evaluationsergebnisse. 
 
 
 
