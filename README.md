@@ -4,13 +4,13 @@
 ## Implementierung für die Modulprüfung in "Methoden der angewandten Computerlinguistik"
 
 
-## Beschreibung  
+### Beschreibung  
 
 In diesem Git-Repository befindet sich die Implementierung zur Hausarbeit "Generierung pragmatischer Bildbeschreibungen auf Wortebene: Ein Balanceakt zwischen Qualität und Informativität" im Modul "Methoden der angewandten Computerlinguistik" mitsamt generierter Bildbeschreibungen und Evaluationsergebnisse. 
 
 
 
-## Ausführung des Codes
+### Ausführung des Codes
 
 1. Klonen, Virtuelles Umgebung erstellen und Abhängikeiten installieren
 
@@ -27,7 +27,7 @@ conda activate clip_prefix_caption
 
 
 
-## Annerkennung
+### Annerkennung
 
 Der Code ist eine in Teilen stark abgeänderte Version des Repositorys https://github.com/rmokady/CLIP_prefix_caption für das Paper "ClipCap: CLIP Prefix for Image Captioning" (Mokady, Hertz und Bermano 2021). Außerdem beinhaltet das Repository eine leicht abgeänderte Version des Repositorys https://github.com/ramavedantam/cider für die CIDEr-Metrik zur Messung der Qualität von Bildbeschreibungen. 
 
